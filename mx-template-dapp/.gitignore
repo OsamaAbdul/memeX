@@ -24,7 +24,6 @@ wdio/node_modules
 .env.production.local
 .vscode
 .env
-.gitignore
 
 npm-debug.log*
 yarn-debug.log*
