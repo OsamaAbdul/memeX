@@ -42,16 +42,18 @@
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.2.1",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.9",
+    "vite": "4.4.9",
+    "typescript": "5.2.2"
   },
   "scripts": {
     "lint": "eslint --ext js,ts,tsx src --fix",
     "start-devnet": "npm run copy-devnet-config && vite dev",
     "start-testnet": "npm run copy-testnet-config && vite dev",
     "start-mainnet": "npm run copy-mainnet-config && vite dev",
-    "build-devnet": "tsc && npm run copy-devnet-config && vite build",
-    "build-testnet": "tsc && npm run copy-testnet-config && vite build",
-    "build-mainnet": "tsc && npm run copy-mainnet-config && vite build",
+    "build-devnet": "npx tsc && npm run copy-devnet-config && npx vite build",
+    "build-testnet": "npx tsc && npm run copy-testnet-config && npx vite build",
+    "build-mainnet": "npx tsc && npm run copy-mainnet-config && npx vite build",
     "build": "npm run build-devnet",
     "copy-devnet-config": "cp ./src/config/config.devnet.ts ./src/config/index.ts",
     "copy-testnet-config": "cp ./src/config/config.testnet.ts ./src/config/index.ts",
@@ -111,8 +113,6 @@
     "tailwindcss": "4.0.15",
     "ts-jest": "29.1.1",
     "ts-node": "10.9.2",
-    "typescript": "5.2.2",
-    "vite": "4.4.9",
     "vite-plugin-node-polyfills": "0.14.1",
     "vite-plugin-svgr": "4.0.0",
     "vite-tsconfig-paths": "4.2.1"
