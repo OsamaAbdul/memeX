@@ -49,6 +49,8 @@
   },
   "scripts": {
     "lint": "eslint --ext js,ts,tsx src --fix",
+    "dev": "npm run start-devnet",
+    "start": "npm run start-devnet",
     "start-devnet": "npm run copy-devnet-config && vite dev",
     "start-testnet": "npm run copy-testnet-config && vite dev",
     "start-mainnet": "npm run copy-mainnet-config && vite dev",

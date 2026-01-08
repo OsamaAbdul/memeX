@@ -20,6 +20,17 @@ export interface TokenArchitectResponse {
     };
 }
 
+export interface NFTArchitectResponse {
+    name: string;
+    description: string;
+    category: string;
+    attributes: Array<{
+        trait_type: string;
+        value: string;
+    }>;
+    rarityScore: number;
+}
+
 export interface BrandingResponse {
     logoCID: string;
     bannerCID: string;
@@ -95,9 +106,23 @@ export const TokenArchitectAgent = async (prompt: string): Promise<TokenArchitec
     return await callGemini(systemPrompt, prompt);
 };
 
-export const BrandGeneratorAgent = async (architect: TokenArchitectResponse): Promise<BrandingResponse> => {
+export const NFTArchitectAgent = async (prompt: string): Promise<NFTArchitectResponse> => {
+    const systemPrompt = `You are the NFT Architect for memeX. 
+    Transform a meme idea into a unique NFT collectible.
+    Return a JSON object with: 
+    - name: Unique name for the NFT
+    - description: A story or lore behind this NFT
+    - category: One of [Rare, Epic, Legendary, Mythic]
+    - attributes: Array of { trait_type, value } (at least 3 traits)
+    - rarityScore: (0-100, where 100 is rarest)`;
+
+    return await callGemini(systemPrompt, prompt);
+};
+
+export const BrandGeneratorAgent = async (architect: any): Promise<BrandingResponse> => {
+    const symbol = 'symbol' in architect ? `(${architect.symbol})` : '';
     const systemPrompt = `You are a Brand Genius for memeX. 
-    Given the token identity: ${architect.name} (${architect.symbol}) - ${architect.description}.
+    Given the identity: ${architect.name} ${symbol} - ${architect.description}.
     Generate:
     - tagline: A viral, pump-inducing tagline.
     - logoKeywords: comma-separated keywords for an image (e.g. "cute, cat, space, neon")
@@ -119,9 +144,9 @@ export const BrandGeneratorAgent = async (architect: TokenArchitectResponse): Pr
     };
 };
 
-export const RiskGuardAgent = async (architect: TokenArchitectResponse): Promise<RiskResponse> => {
+export const RiskGuardAgent = async (architect: any): Promise<RiskResponse> => {
     const systemPrompt = `You are the Risk & Compliance Guard.
-    Audit this token concept: Name: ${architect.name}, Description: ${architect.description}.
+    Audit this concept: Name: ${architect.name}, Description: ${architect.description}.
     Analyze for: Scams, hate speech, or financial red flags.
     Return JSON:
     - riskScore: (0-100, 0 is safest)
@@ -129,12 +154,13 @@ export const RiskGuardAgent = async (architect: TokenArchitectResponse): Promise
     - blocked: boolean
     - reason: string if blocked`;
 
-    return await callGemini(systemPrompt, "Audit this token.");
+    return await callGemini(systemPrompt, "Audit this concept.");
 };
 
-export const TransactionComposerAgent = async (architect: TokenArchitectResponse): Promise<TransactionResponse> => {
+export const TransactionComposerAgent = async (architect: any): Promise<TransactionResponse> => {
     // This agent is mostly logic-based but uses AI to explain fees/requirements
-    const systemPrompt = `Analyze the launch requirements for a token with ${architect.tokenomics.totalSupply} supply.
+    const supplyInfo = architect.tokenomics?.totalSupply ? `${architect.tokenomics.totalSupply} supply` : "NFT unique issuance";
+    const systemPrompt = `Analyze the launch requirements for an asset with ${supplyInfo}.
     Predict the network load and explain requirements.
     Return JSON:
     - estimatedFee: e.g. "0.005 EGLD"

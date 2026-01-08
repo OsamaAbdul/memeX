@@ -29,24 +29,35 @@ const agents = [
     { id: 'transaction', name: 'Composer', icon: Cpu, color: 'text-neon-pink' },
 ];
 
+const templates = [
+    { name: 'Space Shiba', prompt: 'A futuristic Shiba Inu wearing a neon space helmet on Mars.', icon: '🐕' },
+    { name: 'AI Pingu', prompt: 'A robotic penguin that controls the global financial markets.', icon: '🐧' },
+    { name: 'Laser Frog', prompt: 'A pixel-art frog that shoots laser beams from its eyes.', icon: '🐸' },
+    { name: 'Cyber Cat', prompt: 'A high-tech cat living in a synthwave city with glowing whiskers.', icon: '🐈' },
+];
+
 export const CreateToken = () => {
     const [prompt, setPrompt] = useState('');
     const [step, setStep] = useState<'input' | 'processing' | 'review'>('input');
     const [currentAgent, setCurrentAgent] = useState(0);
+    const [isAutoPilot, setIsAutoPilot] = useState(false);
+    const [selectedTone, setSelectedTone] = useState('Chaotic');
+    const [selectedCategory, setSelectedCategory] = useState('Meme');
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
     const { isGenerating, setGenerating, setGenerationResult, activeGeneration } = useAppStore();
 
-    const handleStartLaunch = async () => {
-        if (!prompt) return;
+    const handleStartLaunch = async (customPrompt?: string) => {
+        const finalPrompt = customPrompt || prompt;
+        if (!finalPrompt) return;
 
         setStep('processing');
         setGenerating(true);
         setCurrentAgent(0);
 
         try {
-            const architectData = await TokenArchitectAgent(prompt);
+            const architectData = await TokenArchitectAgent(`${finalPrompt} [Tone: ${selectedTone}, Category: ${selectedCategory}]`);
             setGenerationResult('architect', architectData);
             setCurrentAgent(1);
 
@@ -62,7 +73,20 @@ export const CreateToken = () => {
             setGenerationResult('transaction', txData);
 
             setGenerating(false);
-            setStep('review');
+
+            if (isAutoPilot) {
+                // If autopilot is on, we'll try to trigger the launch immediately
+                // However, handleSignAndLaunch needs activeGeneration to be set, 
+                // and state updates are async. In a real app, we'd pass the data directly.
+                // For this demo, we'll move to review but set a high-speed transition.
+                setStep('review');
+                setTimeout(() => {
+                    const signBtn = document.getElementById('autopilot-action');
+                    if (signBtn) signBtn.click();
+                }, 1000);
+            } else {
+                setStep('review');
+            }
         } catch (error) {
             console.error("AI Launch failed", error);
             setGenerating(false);
@@ -174,13 +198,61 @@ export const CreateToken = () => {
                                 className="w-full h-32 bg-slate-900 border-2 border-slate-800 rounded-2xl p-6 text-white text-xl focus:border-neon-pink outline-none transition-all placeholder:text-slate-600 resize-none shadow-2xl"
                             />
                             <Button
-                                onClick={handleStartLaunch}
+                                onClick={() => handleStartLaunch()}
                                 disabled={!prompt}
                                 className="absolute bottom-4 right-4 bg-neon-pink hover:bg-magenta-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 group transition-all transform active:scale-95"
                             >
                                 <span className="font-bold">GENERATE</span>
                                 <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                             </Button>
+                        </div>
+
+                        <div className="max-w-2xl mx-auto space-y-6 text-left bg-slate-900/40 p-6 rounded-2xl border border-white/5">
+                            <div className="flex flex-col md:flex-row gap-6 justify-between">
+                                <div className="space-y-3">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Select Vibe</span>
+                                    <div className="flex gap-2">
+                                        {['Chaotic', 'Serious', 'Bullish'].map(v => (
+                                            <button
+                                                key={v}
+                                                onClick={() => setSelectedTone(v)}
+                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${selectedTone === v ? 'bg-neon-pink border-neon-pink text-white shadow-lg' : 'bg-slate-950 border-white/5 text-slate-500 hover:text-white'}`}
+                                            >
+                                                {v}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Fast Track</span>
+                                    <div
+                                        onClick={() => setIsAutoPilot(!isAutoPilot)}
+                                        className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${isAutoPilot ? 'bg-neon-pink' : 'bg-slate-800'}`}
+                                    >
+                                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${isAutoPilot ? 'translate-x-6' : 'translate-x-0'}`} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Need inspiration?</span>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                    {templates.map(t => (
+                                        <button
+                                            key={t.name}
+                                            onClick={() => {
+                                                setPrompt(t.prompt);
+                                                handleStartLaunch(t.prompt);
+                                            }}
+                                            className="p-3 bg-slate-950 border border-white/5 rounded-xl text-left hover:border-neon-pink/50 transition-all group group-hover:bg-slate-900/50"
+                                        >
+                                            <span className="text-xl mb-1 block">{t.icon}</span>
+                                            <span className="text-[10px] text-white font-bold block truncate">{t.name}</span>
+                                            <span className="text-[8px] text-slate-500 line-clamp-1 group-hover:text-slate-400">Launch now</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="flex justify-center gap-6 text-slate-500 text-sm">
@@ -294,6 +366,7 @@ export const CreateToken = () => {
                                         REGENERATE
                                     </Button>
                                     <Button
+                                        id="autopilot-action"
                                         onClick={handleSignAndLaunch}
                                         className="flex-grow bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center gap-2"
                                     >

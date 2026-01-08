@@ -6,5 +6,7 @@ export enum RouteNamesEnum {
   dashboardOverview = '/dashboard/overview',
   dashboardCreate = '/dashboard/create',
   dashboardProfile = '/dashboard/profile',
-  dashboardTokenDetails = '/dashboard/token/:address'
+  dashboardTokenDetails = '/dashboard/token/:address',
+  dashboardNFTs = '/dashboard/nfts',
+  dashboardCreateNFT = '/dashboard/create-nft'
 }

@@ -1,6 +1,8 @@
 import {
   faChartLine,
   faChevronUp,
+  faGem,
+  faPalette,
   faRocket,
   faUser
 } from '@fortawesome/free-solid-svg-icons';
@@ -15,9 +17,14 @@ import { MenuItemsType, SideMenuPropsType } from './sideMenu.types';
 
 const menuItems = [
   {
-    title: 'Launch Meme',
-    icon: faRocket,
-    path: RouteNamesEnum.dashboardCreate
+    title: 'Mint NFT',
+    icon: faPalette,
+    path: RouteNamesEnum.dashboardCreateNFT
+  },
+  {
+    title: 'NFT Market',
+    icon: faGem,
+    path: RouteNamesEnum.dashboardNFTs
   },
   {
     title: 'Overview',

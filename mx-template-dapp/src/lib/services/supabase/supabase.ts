@@ -22,6 +22,21 @@ export interface TokenDB {
     transaction_hash?: string;
 }
 
+export interface NFTDB {
+    id?: string;
+    created_at?: string;
+    name: string;
+    description: string;
+    image_url: string;
+    rarity_score: number;
+    category: string;
+    attributes: any;
+    creator_address: string;
+    is_listed: boolean;
+    price?: string;
+    transaction_hash?: string;
+}
+
 export const saveToken = async (tokenData: TokenDB) => {
     const { data, error } = await supabase
         .from('tokens')
@@ -48,6 +63,49 @@ export const getTokens = async () => {
     }
 
     return data as TokenDB[];
+};
+
+export const saveNFT = async (nftData: NFTDB) => {
+    const { data, error } = await supabase
+        .from('nfts')
+        .insert([nftData])
+        .select();
+
+    if (error) {
+        console.error('Error saving NFT to Supabase:', error);
+        throw error;
+    }
+
+    return data[0];
+};
+
+export const getNFTs = async () => {
+    const { data, error } = await supabase
+        .from('nfts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching NFTs from Supabase:', error);
+        throw error;
+    }
+
+    return data as NFTDB[];
+};
+
+export const listNFT = async (nftId: string, price: string) => {
+    const { data, error } = await supabase
+        .from('nfts')
+        .update({ is_listed: true, price })
+        .eq('id', nftId)
+        .select();
+
+    if (error) {
+        console.error('Error listing NFT:', error);
+        throw error;
+    }
+
+    return data[0];
 };
 
 export const getTokenBySymbol = async (symbol: string) => {

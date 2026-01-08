@@ -8,6 +8,8 @@ import { RouteType } from 'types';
 import { Overview } from 'pages/Dashboard/Overview';
 import { CreateToken } from 'pages/CreateToken/CreateToken';
 import { TokenDetails } from 'pages/TokenDetails/TokenDetails';
+import { CreateNFT } from 'pages/CreateNFT/CreateNFT';
+import { NFTGallery } from 'pages/Dashboard/NFTGallery';
 
 interface RouteWithTitleType extends RouteType {
   title: string;
@@ -46,6 +48,16 @@ export const routes: RouteWithTitleType[] = [
         path: RouteNamesEnum.dashboardTokenDetails,
         title: 'Token Details',
         component: TokenDetails
+      },
+      {
+        path: RouteNamesEnum.dashboardNFTs,
+        title: 'NFT Gallery',
+        component: NFTGallery
+      },
+      {
+        path: RouteNamesEnum.dashboardCreateNFT,
+        title: 'Create NFT',
+        component: CreateNFT
       },
       {
         path: RouteNamesEnum.dashboardProfile,
