@@ -12,7 +12,7 @@ export interface NFTCardProps {
     isListed: boolean;
     price?: string;
     onList: (id: string) => void;
-    onBuy: (id: string) => void;
+    onBuy: (id: string, price: string) => void;
 }
 
 export const NFTCard = ({
@@ -88,7 +88,7 @@ export const NFTCard = ({
                 <div className="flex gap-2">
                     {isListed ? (
                         <Button
-                            onClick={() => onBuy(id)}
+                            onClick={() => onBuy(id, price || '0')}
                             className="flex-1 bg-neon-blue hover:bg-cyan-600 text-slate-950 rounded-xl font-bold h-10 gap-2"
                         >
                             <ShoppingCart className="h-4 w-4" /> BUY NOW

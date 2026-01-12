@@ -1,4 +1,5 @@
 import classNames from 'classnames';
+import DefaultLogo from '@/assets/img/-llxs6r.jpg';
 
 // prettier-ignore
 const styles = {
@@ -16,17 +17,6 @@ interface LogoPropsType {
 
 export const Logo = ({ hideTextOnMobile }: LogoPropsType) => (
   <div className={styles.logo}>
-    <div className={styles.logoIcon}>
-      <div className={styles.logoIconEmpty} />
-      <div className={styles.logoIconFilled} />
-    </div>
-
-    <div
-      className={classNames(styles.logoText, {
-        [styles.logoTextHidden]: hideTextOnMobile
-      })}
-    >
-      memeX options
-    </div>
+    <img src={DefaultLogo} alt="MemeX" className="h-10 w-auto rounded-lg object-contain" />
   </div>
 );

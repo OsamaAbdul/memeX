@@ -9,6 +9,7 @@ import {
     RiskGuardAgent,
     TransactionComposerAgent
 } from '@/lib/services/ai/aiService';
+import { createMintNFTTransaction } from '@/lib/services/nftService';
 import { signAndSendTransactions } from '@/helpers';
 import {
     Transaction,
@@ -42,6 +43,7 @@ export const CreateNFT = () => {
     const [currentAgent, setCurrentAgent] = useState(0);
     const [isAutoPilot, setIsAutoPilot] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('Epic');
+    const [isSigning, setIsSigning] = useState(false);
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
@@ -94,25 +96,32 @@ export const CreateNFT = () => {
     };
 
     const handleSignAndMint = async () => {
+        setIsSigning(true);
         try {
             if (!activeNFT?.architect) return;
+
+            // 1. Upload Image First
+            let finalImageUrl = activeNFT.branding?.logoUrl || '';
+            if (finalImageUrl) {
+                // Show some UI feedback if possible, or just await
+                finalImageUrl = await uploadImageFromUrl(finalImageUrl, `${activeNFT.architect.name}_nft`);
+            }
 
             const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
             const account = await proxyProvider.getAccount(new Address(address));
 
-            // Create a payload that simulates an NFT minting
-            const nameHex = Buffer.from(activeNFT.architect.name).toString('hex');
-
-            const mintTransaction = new Transaction({
-                value: BigInt(0),
-                data: new TextEncoder().encode(`mintNFT@${nameHex}@${Buffer.from('MEMEX').toString('hex')}`),
-                receiver: new Address(address),
-                gasLimit: BigInt(60000000),
-                chainID: network.chainId,
-                sender: new Address(address),
-                nonce: account.nonce,
-                version: 2
+            // 2. Construct Proper ESDTNFTCreate Transaction
+            const mintTransaction = createMintNFTTransaction({
+                name: activeNFT.architect.name,
+                description: activeNFT.architect.description,
+                imageCid: activeNFT.branding?.logoCID || "", // Fallback
+                imageUrl: finalImageUrl, // Priority
+                attributes: activeNFT.architect.attributes,
+                senderAddress: address
             });
+
+            // Sync nonce
+            mintTransaction.nonce = BigInt(account.nonce);
 
             await signAndSendTransactions({
                 transactions: [mintTransaction],
@@ -123,14 +132,7 @@ export const CreateNFT = () => {
                 }
             });
 
-            // Permanent Storage for AI Art
-            let finalImageUrl = activeNFT.branding?.logoUrl || '';
-
-            if (finalImageUrl) {
-                finalImageUrl = await uploadImageFromUrl(finalImageUrl, `${activeNFT.architect.name}_nft`);
-            }
-
-            // Save to Supabase
+            // 3. Save to Supabase (Metadata)
             await saveNFT({
                 name: activeNFT.architect.name,
                 description: activeNFT.architect.description,
@@ -155,11 +157,21 @@ export const CreateNFT = () => {
 
         } catch (e) {
             console.error("Minting failed:", e);
+        } finally {
+            setIsSigning(false);
         }
     };
 
     return (
-        <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh] flex flex-col items-center justify-center">
+        <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh] flex flex-col items-center justify-center relative">
+            {isSigning && (
+                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <Loader2 className="h-16 w-16 text-neon-blue animate-spin mb-4" />
+                    <h2 className="text-3xl font-bangers text-white tracking-widest animate-pulse">Waiting for Wallet...</h2>
+                    <p className="text-slate-400 mt-2">Please sign the transaction in your extension/app</p>
+                </div>
+            )}
+
             <AnimatePresence mode="wait">
                 {step === 'input' && (
                     <motion.div

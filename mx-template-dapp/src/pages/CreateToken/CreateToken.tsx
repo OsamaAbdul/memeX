@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Rocket, Brain, Palette, ShieldCheck, Cpu, ArrowRight, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Rocket, Brain, Palette, ShieldCheck, Cpu, ArrowRight, Loader2, AlertTriangle, CheckCircle2, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -22,6 +22,8 @@ import confetti from 'canvas-confetti';
 import { useNavigate } from 'react-router-dom';
 import { RouteNamesEnum } from '@/localConstants';
 import { contractAddress } from '@/config';
+import { createLaunchTransaction } from '@/lib/services/launchpad';
+import DefaultLogo from '@/assets/img/-llxs6r.jpg';
 
 const agents = [
     { id: 'architect', name: 'Token Architect', icon: Brain, color: 'text-blue-400' },
@@ -31,10 +33,10 @@ const agents = [
 ];
 
 const templates = [
-    { name: 'Space Shiba', prompt: 'A futuristic Shiba Inu wearing a neon space helmet on Mars.', icon: '🐕' },
-    { name: 'AI Pingu', prompt: 'A robotic penguin that controls the global financial markets.', icon: '🐧' },
-    { name: 'Laser Frog', prompt: 'A pixel-art frog that shoots laser beams from its eyes.', icon: '🐸' },
-    { name: 'Cyber Cat', prompt: 'A high-tech cat living in a synthwave city with glowing whiskers.', icon: '🐈' },
+    { name: 'Space Shiba', prompt: 'A futuristic Shiba Inu wearing a neon space helmet on Mars.', icon: '🐕', logo: DefaultLogo },
+    { name: 'AI Pingu', prompt: 'A robotic penguin that controls the global financial markets.', icon: '🐧', logo: DefaultLogo },
+    { name: 'Laser Frog', prompt: 'A pixel-art frog that shoots laser beams from its eyes.', icon: '🐸', logo: DefaultLogo },
+    { name: 'Cyber Cat', prompt: 'A high-tech cat living in a synthwave city with glowing whiskers.', icon: '🐈', logo: DefaultLogo },
 ];
 
 export const CreateToken = () => {
@@ -48,13 +50,18 @@ export const CreateToken = () => {
     // New State for Multi-Step Launch
     const [launchStep, setLaunchStep] = useState<'issue' | 'activate'>('issue');
     const [issuedTokenId, setIssuedTokenId] = useState('');
+    const [isSigning, setIsSigning] = useState(false);
+
+    // Editable Fields State
+    const [customSupply, setCustomSupply] = useState('1,000,000,000');
+    const [customLiquidity, setCustomLiquidity] = useState('100');
 
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
     const { isGenerating, setGenerating, setGenerationResult, activeGeneration } = useAppStore();
 
-    const handleStartLaunch = async (customPrompt?: string) => {
+    const handleGenerate = async (customPrompt?: string) => {
         const finalPrompt = customPrompt || prompt;
         if (!finalPrompt) return;
 
@@ -107,8 +114,12 @@ export const CreateToken = () => {
 
             const nameHex = Buffer.from(activeGeneration.architect.name).toString('hex');
             const symbolHex = Buffer.from(activeGeneration.architect.symbol).toString('hex');
-            const supplyBig = BigInt(activeGeneration.architect.tokenomics.totalSupply.replace(/,/g, ''));
-            const supplyHex = supplyBig.toString(16);
+
+            // Use custom supply from input (remove commas)
+            const cleanSupply = customSupply.replace(/,/g, '');
+            const supplyBig = BigInt(cleanSupply);
+            let supplyHex = supplyBig.toString(16);
+            if (supplyHex.length % 2 !== 0) supplyHex = '0' + supplyHex;
 
             // Issue Transaction
             // Receiver: System Contract for Issuance
@@ -137,8 +148,12 @@ export const CreateToken = () => {
             // Move to next step
             setLaunchStep('activate');
 
+            alert("Transaction sent! Once confirmed, copy the Token ID from your wallet (e.g., MEME-123456) and paste it below.");
+
         } catch (e) {
             console.error("Issuance failed:", e);
+        } finally {
+            setIsSigning(false);
         }
     };
 
@@ -148,39 +163,28 @@ export const CreateToken = () => {
             return;
         }
 
+        setIsSigning(true);
         try {
             if (!activeGeneration?.architect) return;
             const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
             const onChainAccount = await proxyProvider.getAccount(new Address(address));
 
-            const supplyBig = BigInt(activeGeneration.architect.tokenomics.totalSupply.replace(/,/g, ''));
-            const supplyHex = supplyBig.toString(16);
-            const tokenIdHex = Buffer.from(issuedTokenId).toString('hex');
+            const cleanSupply = customSupply.replace(/,/g, '');
+            const supplyBig = BigInt(cleanSupply);
 
-            // Define Virtual EGLD Reserve (e.g. 100 EGLD)
-            const virtualEgld = BigInt("100000000000000000000"); // 100 EGLD
-            const virtualEgldHex = virtualEgld.toString(16);
-            if (virtualEgldHex.length % 2 !== 0) { /* pad */ } // Buffer handles it?
+            // Use custom liquidity
+            // Note: In real bonding curve, initial liquidity relates to virtual EGLD differently.
+            // For now assuming the input is exactly the Virtual EGLD amount intended.
+            const virtualEgld = BigInt(customLiquidity) * BigInt("1000000000000000000"); // EGLD has 18 decimals
 
-            // ESDTTransfer@TokenID@Amount@Function@Args
-            // We use 'launch_token' function
-            // Arg1: Virtual EGLD Amount
-
-            // Need correct even length hex
-            const safeHex = (val: string) => val.length % 2 !== 0 ? '0' + val : val;
-
-            const dataString = `ESDTTransfer@${safeHex(tokenIdHex)}@${safeHex(supplyHex)}@${Buffer.from('launch_token').toString('hex')}@${safeHex(virtualEgldHex)}`;
-
-            const launchTransaction = new Transaction({
-                value: BigInt(0),
-                data: new TextEncoder().encode(dataString),
-                receiver: new Address(contractAddress),
-                gasLimit: BigInt(10000000), // High gas for safety
-                chainID: network.chainId,
-                sender: new Address(address),
-                nonce: onChainAccount.nonce,
-                version: 2
+            const launchTransaction = createLaunchTransaction({
+                tokenId: issuedTokenId,
+                supplyBigInt: supplyBig,
+                virtualEgldAmount: virtualEgld,
+                senderAddress: address
             });
+
+            launchTransaction.nonce = BigInt(onChainAccount.nonce);
 
             await signAndSendTransactions({
                 transactions: [launchTransaction],
@@ -196,10 +200,14 @@ export const CreateToken = () => {
 
         } catch (e) {
             console.error("Activation failed:", e);
+        } finally {
+            setIsSigning(false);
         }
     }
 
     const handlePostLaunch = async () => {
+        if (!activeGeneration?.architect) return;
+
         // Permanent Storage for AI Art
         let finalLogoUrl = activeGeneration.branding?.logoUrl || '';
         let finalBannerUrl = activeGeneration.branding?.bannerUrl || '';
@@ -219,7 +227,7 @@ export const CreateToken = () => {
             logo_url: finalLogoUrl,
             banner_url: finalBannerUrl,
             risk_score: activeGeneration.risk?.riskScore || 0,
-            total_supply: activeGeneration.architect.tokenomics.totalSupply,
+            total_supply: customSupply,
             category: activeGeneration.architect.category,
             tone: activeGeneration.architect.tone,
             tagline: activeGeneration.branding?.tagline || '',
@@ -240,10 +248,18 @@ export const CreateToken = () => {
     }
 
     // Helper to get symbol/id
-    const fixedTokenId = () => issuedTokenId || activeGeneration.architect.symbol;
+    const fixedTokenId = () => issuedTokenId || activeGeneration?.architect?.symbol || '';
 
     return (
-        <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh] flex flex-col items-center justify-center">
+        <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh] flex flex-col items-center justify-center relative">
+            {isSigning && (
+                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <Loader2 className="h-16 w-16 text-neon-pink animate-spin mb-4" />
+                    <h2 className="text-3xl font-bangers text-white tracking-widest animate-pulse">Waiting for Wallet...</h2>
+                    <p className="text-slate-400 mt-2">Please sign the transaction in your extension/app</p>
+                </div>
+            )}
+
             <AnimatePresence mode="wait">
                 {step === 'input' && (
                     <motion.div
@@ -255,10 +271,10 @@ export const CreateToken = () => {
                     >
                         <div className="space-y-4">
                             <h1 className="text-5xl md:text-6xl font-bangers text-white tracking-widest">
-                                LAUNCH A <span className="text-neon-pink text-glow">MEME</span>
+                                LAUNCH A <span className="text-neon-pink text-glow">MEMECOIN</span>
                             </h1>
                             <p className="text-slate-400 text-lg max-w-xl mx-auto">
-                                Type one sentence. Our AI agents will handle the names, branding, tokenomics, and risk checks.
+                                Type a vibe. Our AI will generate the lore, tokenomics, and branding instantly.
                             </p>
                         </div>
 
@@ -266,71 +282,45 @@ export const CreateToken = () => {
                             <textarea
                                 value={prompt}
                                 onChange={(e) => setPrompt(e.target.value)}
-                                placeholder="Describe your meme idea (e.g. 'A chaotic cat coin for crypto degenerates')"
+                                placeholder="Describe your meme idea (e.g. 'A cybernetic frog that controls the stock market')"
                                 className="w-full h-32 bg-slate-900 border-2 border-slate-800 rounded-2xl p-6 text-white text-xl focus:border-neon-pink outline-none transition-all placeholder:text-slate-600 resize-none shadow-2xl"
                             />
                             <Button
-                                onClick={() => handleStartLaunch()}
+                                onClick={() => handleGenerate()}
                                 disabled={!prompt}
                                 className="absolute bottom-4 right-4 bg-neon-pink hover:bg-magenta-600 text-white rounded-xl px-6 py-4 flex items-center gap-2 group transition-all transform active:scale-95"
                             >
                                 <span className="font-bold">GENERATE</span>
-                                <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                                <Wand2 className="h-5 w-5 group-hover:rotate-12 transition-transform" />
                             </Button>
                         </div>
 
-                        <div className="max-w-2xl mx-auto space-y-6 text-left bg-slate-900/40 p-6 rounded-2xl border border-white/5">
-                            <div className="flex flex-col md:flex-row gap-6 justify-between">
-                                <div className="space-y-3">
-                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Select Vibe</span>
-                                    <div className="flex gap-2">
-                                        {['Chaotic', 'Serious', 'Bullish'].map(v => (
-                                            <button
-                                                key={v}
-                                                onClick={() => setSelectedTone(v)}
-                                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${selectedTone === v ? 'bg-neon-pink border-neon-pink text-white shadow-lg' : 'bg-slate-950 border-white/5 text-slate-500 hover:text-white'}`}
-                                            >
-                                                {v}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Fast Track</span>
-                                    <div
-                                        onClick={() => setIsAutoPilot(!isAutoPilot)}
-                                        className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${isAutoPilot ? 'bg-neon-pink' : 'bg-slate-800'}`}
+                        <div className="space-y-3 max-w-2xl mx-auto">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Or choose a template</span>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {templates.map(t => (
+                                    <button
+                                        key={t.name}
+                                        onClick={() => {
+                                            setPrompt(t.prompt);
+                                            handleGenerate(t.prompt);
+                                        }}
+                                        className="p-3 bg-slate-950 border border-white/5 rounded-xl text-left hover:border-neon-pink/50 transition-all group group-hover:bg-slate-900/50 relative overflow-hidden"
                                     >
-                                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${isAutoPilot ? 'translate-x-6' : 'translate-x-0'}`} />
-                                    </div>
-                                </div>
+                                        <div className="absolute inset-0 bg-gradient-to-br from-neon-pink/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <div className="relative z-10 flex flex-col gap-2">
+                                            <div className="flex justify-between items-start">
+                                                <span className="text-2xl">{t.icon}</span>
+                                                <img src={t.logo} alt="Logo" className="w-6 h-6 rounded-sm opacity-50 group-hover:opacity-100 transition-opacity" />
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] text-white font-bold block truncate">{t.name}</span>
+                                                <span className="text-[8px] text-slate-500 line-clamp-1 group-hover:text-slate-400">Launch now</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
-
-                            <div className="space-y-3">
-                                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Need inspiration?</span>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {templates.map(t => (
-                                        <button
-                                            key={t.name}
-                                            onClick={() => {
-                                                setPrompt(t.prompt);
-                                                handleStartLaunch(t.prompt);
-                                            }}
-                                            className="p-3 bg-slate-950 border border-white/5 rounded-xl text-left hover:border-neon-pink/50 transition-all group group-hover:bg-slate-900/50"
-                                        >
-                                            <span className="text-xl mb-1 block">{t.icon}</span>
-                                            <span className="text-[10px] text-white font-bold block truncate">{t.name}</span>
-                                            <span className="text-[8px] text-slate-500 line-clamp-1 group-hover:text-slate-400">Launch now</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-center gap-6 text-slate-500 text-sm">
-                            <div className="flex items-center gap-2"><Brain className="h-4 w-4" /> Smart Tokenomics</div>
-                            <div className="flex items-center gap-2"><Palette className="h-4 w-4" /> AI Branding</div>
-                            <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Risk Guard</div>
                         </div>
                     </motion.div>
                 )}
@@ -344,8 +334,8 @@ export const CreateToken = () => {
                         className="w-full max-w-md space-y-8"
                     >
                         <div className="text-center space-y-2">
-                            <h2 className="text-2xl font-bold text-white uppercase tracking-widest">AI Agents working...</h2>
-                            <p className="text-slate-500">Orchestrating the launch sequence</p>
+                            <h2 className="text-2xl font-bold text-white uppercase tracking-widest">AI Engine Active...</h2>
+                            <p className="text-slate-500">Constructing your memecoin reality</p>
                         </div>
 
                         <div className="space-y-4">
@@ -367,7 +357,7 @@ export const CreateToken = () => {
                                         <div className="flex-grow">
                                             <span className={`font-bold block ${isActive ? 'text-white' : 'text-slate-500'}`}>{agent.name}</span>
                                             {isActive && <span className="text-xs text-neon-pink animate-pulse">Processing...</span>}
-                                            {isDone && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Ready</span>}
+                                            {isDone && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Complete</span>}
                                         </div>
                                         {isActive && <Loader2 className="h-5 w-5 text-neon-pink animate-spin" />}
                                     </div>
@@ -382,96 +372,101 @@ export const CreateToken = () => {
                         key="review-step"
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="w-full max-w-2xl bg-slate-900/50 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden"
+                        className="w-full max-w-3xl bg-slate-900/50 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden"
                     >
                         <div className="absolute -top-24 -right-24 w-64 h-64 bg-neon-pink/10 blur-[100px] rounded-full pointer-events-none" />
 
-                        <div className="flex flex-col md:flex-row gap-8 items-start relative z-10">
-                            <div className="w-full md:w-1/3 aspect-square bg-slate-800 rounded-3xl flex items-center justify-center border-2 border-neon-pink/20 relative group overflow-hidden">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start relative z-10">
+                            <div className="w-full aspect-square bg-slate-800 rounded-3xl flex items-center justify-center border-2 border-neon-pink/20 relative group overflow-hidden shadow-2xl">
                                 {activeGeneration.branding?.logoUrl ? (
                                     <img
+                                        key={activeGeneration.branding.logoUrl}
                                         src={activeGeneration.branding.logoUrl}
-                                        alt="AI Generated Art"
+                                        alt="AI Generated Logo"
                                         className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500"
                                     />
                                 ) : (
                                     <Palette className="h-12 w-12 text-slate-600" />
                                 )}
-                                <div className="absolute bottom-2 right-2 bg-slate-950/80 px-3 py-1 rounded-lg text-[10px] text-slate-400 font-bold border border-white/5 uppercase">AI GEN</div>
+                                <div className="absolute top-4 right-4 bg-neon-pink/90 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{activeGeneration.architect.category}</div>
                             </div>
 
-                            <div className="flex-grow space-y-6 w-full">
+                            <div className="space-y-6">
                                 <div className="space-y-1">
-                                    <div className="flex items-center gap-3">
-                                        <h2 className="text-4xl font-bangers text-white uppercase tracking-widest">{activeGeneration.architect.name}</h2>
-                                        <span className="bg-neon-blue/20 text-neon-blue text-xs font-bold px-3 py-1 rounded-full border border-neon-blue/20">${activeGeneration.architect.symbol}</span>
+                                    <h2 className="text-4xl font-bangers text-white uppercase tracking-widest">{activeGeneration.architect.name}</h2>
+                                    <div className="flex items-center gap-2">
+                                        <span className="px-2 py-0.5 bg-slate-800 rounded text-xs font-mono text-neon-pink border border-neon-pink/30">{fixedTokenId() || activeGeneration.architect.symbol + "M"}</span>
+                                        <span className="text-slate-500 text-xs">{activeGeneration.architect.tone} Tone</span>
                                     </div>
-                                    <p className="text-slate-400 italic">"{activeGeneration.branding?.tagline || 'Ready to launch!'}"</p>
+                                    <p className="text-slate-400 text-sm leading-relaxed mt-2">{activeGeneration.architect.description}</p>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5">
-                                        <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider mb-1">Total Supply</span>
-                                        <span className="text-white font-mono">{activeGeneration.architect.tokenomics.totalSupply}</span>
-                                    </div>
-                                    <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5">
-                                        <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider mb-1">Risk Score</span>
-                                        <span className={`font-bold ${activeGeneration.risk?.riskScore < 30 ? 'text-green-400' : 'text-yellow-400'}`}>
-                                            {activeGeneration.risk?.riskScore || 0}/100
-                                        </span>
+                                <div className="space-y-3">
+                                    <h3 className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Tokenomics</h3>
+                                    <div className="bg-slate-950/50 p-4 rounded-xl border border-white/5 space-y-2">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-500">Total Supply</span>
+                                            <input
+                                                type="text"
+                                                value={customSupply}
+                                                onChange={(e) => setCustomSupply(e.target.value)}
+                                                className="bg-transparent text-right text-white font-mono border-b border-white/10 focus:border-neon-pink outline-none w-32"
+                                            />
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-slate-500">Liquidity (EGLD)</span>
+                                            <input
+                                                type="text"
+                                                value={customLiquidity}
+                                                onChange={(e) => setCustomLiquidity(e.target.value)}
+                                                className="bg-transparent text-right text-green-400 font-mono border-b border-white/10 focus:border-neon-pink outline-none w-24"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-neon-pink/5 border border-neon-pink/10 p-4 rounded-xl flex items-start gap-3">
-                                    <AlertTriangle className="h-5 w-5 text-neon-pink flex-shrink-0 mt-0.5" />
-                                    <p className="text-xs text-slate-400">
-                                        High-risk experimental token. This platform does not guarantee profits. Transaction requires EGLD for gas and bonding curve liquidity.
-                                    </p>
-                                </div>
-
-                                {/* Step 1: Issue */}
-                                {launchStep === 'issue' && (
-                                    <div className="flex gap-4 pt-4">
+                                <div className="pt-4 space-y-4">
+                                    <div className="flex gap-4">
                                         <Button
                                             variant="outline"
                                             onClick={() => setStep('input')}
                                             className="flex-1 bg-transparent border-slate-700 text-slate-400 hover:text-white"
                                         >
-                                            REGENERATE
+                                            Try Again
                                         </Button>
-                                        <Button
-                                            id="autopilot-action"
-                                            onClick={handleIssueToken}
-                                            className="flex-grow bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center gap-2"
-                                        >
-                                            <Rocket className="h-5 w-5" />
-                                            STEP 1: ISSUE TOKEN
-                                        </Button>
-                                    </div>
-                                )}
 
-                                {/* Step 2: Activate */}
-                                {launchStep === 'activate' && (
-                                    <div className="space-y-4 pt-2">
-                                        <div className="bg-green-500/10 p-3 rounded-xl border border-green-500/20">
-                                            <p className="text-green-400 text-xs text-center font-bold">Step 1 Complete! Now check your wallet/explorer for the Token Identifier (e.g. MEME-123456) and enter it below.</p>
-                                        </div>
+                                        {!issuedTokenId ? (
+                                            <Button
+                                                onClick={handleIssueToken}
+                                                className="flex-[2] bg-slate-800 hover:bg-slate-700 text-white font-bold h-12 flex items-center justify-center gap-2 border border-white/10"
+                                            >
+                                                <Cpu className="h-5 w-5" />
+                                                1. Issue Token
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={handleActivateMarket}
+                                                className="flex-[2] bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center justify-center gap-2"
+                                            >
+                                                <Rocket className="h-5 w-5" />
+                                                2. Launch Market
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-slate-950/80 p-3 rounded-lg border border-white/5">
+                                        <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">
+                                            Token ID (Paste here after Step 1)
+                                        </label>
                                         <input
+                                            type="text"
+                                            placeholder="e.g. MEME-123456"
                                             value={issuedTokenId}
                                             onChange={(e) => setIssuedTokenId(e.target.value)}
-                                            placeholder="Enter Token Identifier (e.g. TICKER-123456)"
-                                            className="w-full bg-slate-950 border border-white/20 rounded-xl p-3 text-white font-mono text-center outline-none focus:border-neon-pink"
+                                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white text-xs font-mono focus:border-neon-pink outline-none"
                                         />
-                                        <Button
-                                            onClick={handleActivateMarket}
-                                            className="w-full bg-crypto-green hover:bg-green-400 text-black font-bold h-12 flex items-center gap-2 justify-center"
-                                            disabled={!issuedTokenId}
-                                        >
-                                            <Rocket className="h-5 w-5" />
-                                            STEP 2: ACTIVATE MARKET
-                                        </Button>
                                     </div>
-                                )}
+                                </div>
                             </div>
                         </div>
                     </motion.div>

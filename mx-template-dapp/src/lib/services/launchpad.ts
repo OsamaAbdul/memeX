@@ -1,4 +1,5 @@
 import { Transaction, Address } from "@multiversx/sdk-core";
+import { contractAddress } from "@/config";
 
 // Mock IPFS Service
 export const uploadExampleImage = async (file: File): Promise<string> => {
@@ -9,32 +10,38 @@ export const uploadExampleImage = async (file: File): Promise<string> => {
     return "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG";
 };
 
-// Mock Launch Transaction Construction
+// Launch Transaction Construction
 export interface LaunchTokenParams {
-    name: string;
-    ticker: string;
-    description?: string;
-    imageCid: string;
+    tokenId: string;
+    supplyBigInt: bigint;
+    virtualEgldAmount: bigint;
     senderAddress: string;
 }
 
 export const createLaunchTransaction = ({
-    name,
-    ticker,
-    imageCid,
+    tokenId,
+    supplyBigInt,
+    virtualEgldAmount,
     senderAddress,
 }: LaunchTokenParams): Transaction => {
-    // In a real scenario, this would interact with the Factory Contract
-    console.log("Constructing Launch TX for:", { name, ticker, imageCid });
+    console.log("Constructing Launch TX for:", { tokenId, supplyBigInt, virtualEgldAmount, contractAddress });
 
-    const dataString = `launchToken@${Buffer.from(name).toString('hex')}@${Buffer.from(ticker).toString('hex')}@${Buffer.from(imageCid).toString('hex')}`;
+    const safeHex = (val: string) => val.length % 2 !== 0 ? '0' + val : val;
+    const tokenIdHex = Buffer.from(tokenId).toString('hex');
+    const supplyHex = supplyBigInt.toString(16);
+    const virtualEgldHex = virtualEgldAmount.toString(16);
+
+    // ESDTTransfer@TokenID@Amount@Function@Args
+    // We use 'launch_token' function
+    // Arg1: Virtual EGLD Amount
+    const dataString = `ESDTTransfer@${safeHex(tokenIdHex)}@${safeHex(supplyHex)}@${Buffer.from('launch_token').toString('hex')}@${safeHex(virtualEgldHex)}`;
 
     return new Transaction({
         value: 0n,
         data: new Uint8Array(Buffer.from(dataString)),
-        receiver: new Address(senderAddress),
+        receiver: new Address(contractAddress), // Send to Smart Contract
         sender: new Address(senderAddress),
-        gasLimit: 60000000n,
+        gasLimit: 10000000n,
         chainID: "D"
     });
 };

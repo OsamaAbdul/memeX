@@ -5,6 +5,7 @@ import { MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetNetworkConfig } from 'lib';
 import { RouteNamesEnum } from 'localConstants';
+import { Logo } from '@/components/Logo/Logo';
 import { version } from '../../../package.json';
 
 // prettier-ignore
@@ -30,6 +31,10 @@ export const Footer = () => {
   return (
     <footer className={styles.footer}>
       <div className={styles.footerContainer}>
+        <div className="mb-4 grayscale opacity-70 hover:opacity-100 transition-opacity">
+          <Logo hideTextOnMobile={false} />
+        </div>
+
         <div className={styles.footerDescription}>
           <div
             onClick={handleDisclaimerClick}

@@ -131,9 +131,15 @@ export const BrandGeneratorAgent = async (architect: any): Promise<BrandingRespo
 
     const result = await callGemini(systemPrompt, "Generate branding assets.");
 
-    // Use Pollinations.ai for highly specific AI generative art
-    const logoUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.logoKeywords || architect.name + ' mascot meme coin logo, high quality, vector style')}`;
-    const bannerUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.bannerKeywords || architect.name + ' abstract cyber crypto banner, 4k, neon')}`;
+    // Use Pollinations.ai (Standard simplified endpoint)
+    // Add a random seed and timestamp to absolutely prevent caching
+    const randomSeed = Math.floor(Math.random() * 1000000);
+    const timestamp = Date.now();
+    const uniqueRef = `${randomSeed}-${timestamp}`;
+
+    // The correct format is https://image.pollinations.ai/prompt/{prompt}?width=...
+    const logoUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.logoKeywords || architect.name + ' mascot meme coin logo, high quality, vector style')}?width=512&height=512&seed=${uniqueRef}&nologo=true&model=flux`;
+    const bannerUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.bannerKeywords || architect.name + ' abstract cyber crypto banner, 4k, neon')}?width=1200&height=400&seed=${uniqueRef}-banner&nologo=true&model=flux`;
 
     return {
         logoCID: "bafybeigdyrzt5sfp7udm7hu76uh7y26igwwjsrvatqjrfatx6ofv7zvyrm",

@@ -1,46 +1,66 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { RouteNamesEnum } from '@/localConstants';
-import { TokenCard, TokenCardProps } from '@/components/launchpad/TokenCard';
-import { Rocket, TrendingUp, Flame } from 'lucide-react';
+import { TokenCard } from '@/components/launchpad/TokenCard';
+import { NFTCard } from '@/components/launchpad/NFTCard';  // NEW
+import { Rocket, TrendingUp, Flame, Loader2, Sparkles } from 'lucide-react'; // ADDED Sparkles
 import { motion } from 'framer-motion';
-
-const MOCK_TOKENS: TokenCardProps[] = [
-  {
-    name: "PepeX",
-    ticker: "PEPEX",
-    description: "The rarest Pepe on MultiversX. Sentient and ready to moon. Join the froggo army immediately.",
-    imageUrl: "https://media.istockphoto.com/id/1963721343/vector/frog-meme-face-flat-vector-illustration.jpg?s=612x612&w=0&k=20&c=XKyC2F70W6z1M-mUxlqR0-i9-52zJO5qPPnOXFbUoj8=",
-    marketCap: "$420k",
-    replies: 69
-  },
-  {
-    name: "DogeUniverse",
-    ticker: "DOGEU",
-    description: "Much wow. Very chain. Doge wants to go to Mars via MultiversX speed.",
-    imageUrl: "https://img.freepik.com/free-vector/cute-cool-shiba-inu-dog-wearing-sunglasses-peace-hand-cartoon-vector-icon-illustration-animal_138676-4351.jpg",
-    marketCap: "$125k",
-    replies: 12
-  },
-  {
-    name: "CatWifHat",
-    ticker: "CWH",
-    description: "It's literally a cat wif a hat on it. What more do you want? Fundamentals are irrelevant.",
-    imageUrl: "https://i.pinimg.com/736x/2c/31/97/2c3197c9add06aa6d0eb27421376878b.jpg",
-    marketCap: "$88k",
-    replies: 34
-  },
-  {
-    name: "SafeMoonX",
-    ticker: "SMX",
-    description: "Totally safe, surely moon. The deflationary token that burns your regrets away.",
-    imageUrl: "https://t3.ftcdn.net/jpg/03/07/77/66/360_F_307776652_1X48a5eZ51H7Xp6yM4p3Z1pZ1l1X1X1X.jpg",
-    marketCap: "$12k",
-    replies: 5
-  }
-];
+import { getTokens, TokenDB, getNFTs, buyNFT } from '@/lib/services/supabase/supabase'; // ADDED getNFTs, buyNFT
+import { useGetAccount } from '@/lib'; // NEW
 
 export const Home = () => {
+  const [tokens, setTokens] = useState<TokenDB[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [nfts, setNfts] = useState<any[]>([]);
+  const [isBuying, setIsBuying] = useState(false);
+  const { address } = useGetAccount();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [tokensData, nftsData] = await Promise.all([
+          getTokens(undefined, 6),
+          getTokens(undefined, 8) // Placeholder for getListedNFTs if it existed, we filter manually for now
+        ]);
+
+        // Fetch all NFTs and filter listed
+        const allNFTs = await getNFTs();
+        const listedNFTs = allNFTs.filter(n => n.is_listed).slice(0, 4);
+
+        setTokens(tokensData);
+        setNfts(listedNFTs);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleBuyNFT = async (id: string, price: string) => {
+    if (!address) {
+      alert("Please connect wallet first!");
+      return;
+    }
+
+    if (!confirm(`Buy NFT for ${price} EGLD?`)) return;
+
+    setIsBuying(true);
+    try {
+      await buyNFT(id, address);
+      setNfts(prev => prev.filter(n => n.id !== id));
+      alert("NFT Purchased Successfully! 💎");
+    } catch (error) {
+      console.error("Purchase failed", error);
+      alert("Purchase failed. See console.");
+    } finally {
+      setIsBuying(false);
+    }
+  };
+
   return (
     <>
       <div className="flex flex-col items-center justify-center pt-12 pb-16 text-center space-y-8">
@@ -81,16 +101,76 @@ export const Home = () => {
         </motion.div>
       </div>
 
-      <div className="max-w-6xl mx-auto mt-16 px-4">
-        <div className="flex items-center gap-2 mb-8">
-          <Flame className="text-orange-500 fill-orange-500 animate-pulse" />
-          <h2 className="text-3xl font-bangers text-white">Hottest Launches</h2>
+      <div className="max-w-6xl mx-auto mt-16 px-4 pb-20 space-y-20">
+        {/* TOKENS SECTION */}
+        <div>
+          <div className="flex items-center gap-2 mb-8">
+            <Flame className="text-orange-500 fill-orange-500 animate-pulse" />
+            <h2 className="text-3xl font-bangers text-white">Hottest Launches</h2>
+          </div>
+
+          {isLoading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-12 w-12 text-neon-pink animate-spin" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {tokens.map((token, index) => (
+                <TokenCard
+                  key={token.id || index}
+                  name={token.name}
+                  ticker={token.symbol}
+                  description={token.description}
+                  imageUrl={token.logo_url}
+                  marketCap={token.total_supply}
+                  replies={Math.floor(Math.random() * 50)}
+                />
+              ))}
+              {tokens.length === 0 && (
+                <div className="col-span-full text-center text-slate-500 py-10">
+                  No launches yet. Be the first!
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {MOCK_TOKENS.map((token, index) => (
-            <TokenCard key={index} {...token} />
-          ))}
+        {/* NFTS SECTION */}
+        <div>
+          <div className="flex items-center gap-2 mb-8">
+            <Sparkles className="text-neon-blue fill-neon-blue animate-pulse" />
+            <h2 className="text-3xl font-bangers text-white">Trending NFTs</h2>
+          </div>
+
+          {isLoading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="h-12 w-12 text-neon-blue animate-spin" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {nfts.map((nft) => (
+                <NFTCard
+                  key={nft.id}
+                  id={nft.id}
+                  name={nft.name}
+                  description={nft.description}
+                  imageUrl={nft.image_url}
+                  rarityScore={nft.rarity_score}
+                  category={nft.category}
+                  isListed={true}
+                  price={nft.price}
+                  onBuy={() => handleBuyNFT(nft.id, nft.price || '0')}
+                  onList={() => { }} // Home page doesn't support listing, only buying
+                />
+              ))}
+              {nfts.length === 0 && (
+                <div className="col-span-full text-center text-slate-500 py-10 bg-slate-900/50 rounded-2xl border border-white/5">
+                  <p>No NFTs listed for sale right now.</p>
+                  <Link to={RouteNamesEnum.dashboardCreate} className="text-neon-blue hover:underline">Mint one here!</Link>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </>

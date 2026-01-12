@@ -24,15 +24,12 @@ export const Account = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const { address, balance, shard } = useGetAccount();
-  const { herotag, profileUrl } = useGetUserHerotag();
+
 
   const toggleCollapse = () => {
     setIsCollapsed((isCollapsed) => !isCollapsed);
   };
 
-  const img = profileUrl && (
-    <img src={profileUrl} className={styles.connectedAccountDetailsHerotag} />
-  );
 
   const accountDetails: AccountDetailsType[] = [
     {
@@ -51,11 +48,7 @@ export const Account = () => {
         />
       )
     },
-    {
-      icon: herotag ? img || herotag.slice(0, 3) : '@',
-      label: 'Herotag',
-      value: <Username />
-    },
+
     {
       icon: (
         <FontAwesomeIcon

@@ -10,16 +10,18 @@ const getUserProfileData = async (address?: string) => {
 
   try {
     // If URLs are missing or dummy, this might fail. We handle it silently.
-    if (!ID_API_URL || !USERS_API_URL) return null;
+    if (!USERS_API_URL) return null;
 
-    const { data } = await axios.get(`${USERS_API_URL}${address}`, {
-      baseURL: ID_API_URL
-    });
+    // Use full URL if provided, ignoring baseURL which might cause double-prefixing
+    const url = USERS_API_URL.startsWith('http')
+      ? `${USERS_API_URL}/${address}`
+      : `${USERS_API_URL}${address}`;
+
+    const { data } = await axios.get(url);
 
     return data;
   } catch (err) {
     // Suppress error log for profile fetch as it's optional and fails on devnet usually
-    // console.error('Unable to fetch profile url');
     return null;
   }
 };

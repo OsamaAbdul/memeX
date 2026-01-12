@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useGetLoginInfo, useGetAccount, getAccountProvider } from '@/lib';
 import { Button } from '@/components/ui/button';
 import { RouteNamesEnum } from '@/localConstants';
-import { Rocket } from 'lucide-react';
+import DefaultLogo from '@/assets/img/-llxs6r.jpg';
 
 export const Navbar = () => {
     const { isLoggedIn } = useGetLoginInfo();
@@ -19,10 +19,7 @@ export const Navbar = () => {
         <nav className="fixed top-0 left-0 z-50 w-full border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
             <div className="container flex h-16 items-center justify-between px-4">
                 <Link to={RouteNamesEnum.home} className="flex items-center gap-2">
-                    <Rocket className="h-6 w-6 text-neon-pink animate-pulse" />
-                    <span className="font-bangers text-2xl tracking-wider text-white">
-                        meme<span className="text-neon-pink text-3xl">X</span>
-                    </span>
+                    <img src={DefaultLogo} alt="MemeX" className="h-10 w-auto rounded-lg hover:scale-105 transition-transform" />
                 </Link>
 
                 <div className="flex items-center gap-4">

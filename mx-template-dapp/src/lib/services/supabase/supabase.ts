@@ -1,12 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { API_URL } from '@/config';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Updated Credentials provided by user
+const PROJECT_ID = 'nbeywvdwrcagszjmiqvq';
+const SUPABASE_URL = `https://${PROJECT_ID}.supabase.co`;
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iZXl3dmR3cmNhZ3N6am1pcXZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyMjY3MDMsImV4cCI6MjA4MzgwMjcwM30._WANQIf8Dlpg0OeIHE-s7SZCYnpsvs3sAMPxvbT19ds';
 
-// We use the real client. If URL is invalid/unreachable, requests will fail, 
-// so we handle errors gracefully and fall back to Chain Data.
-export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseAnonKey || 'placeholder');
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Local Storage Keys
+const STORAGE_KEYS = {
+    TOKENS: 'memex_local_tokens',
+    NFTS: 'memex_local_nfts'
+};
 
 export interface TokenDB {
     id?: string;
@@ -45,22 +51,24 @@ export interface NFTDB {
  */
 const fetchTokenFromChain = async (symbol: string): Promise<TokenDB | null> => {
     try {
-        // Try to fetch token definition
-        // API often needs identifier (TICKER-123456), but symbol might just be TICKER.
-        // If we only have ticker, we might search. For now assume symbol is identifier or we search.
         const response = await fetch(`${API_URL}/tokens/${symbol}`);
         if (!response.ok) return null;
 
-        const data = await response.json();
+        const data = await response.json() as {
+            name: string;
+            identifier: string;
+            assets?: { pngUrl?: string; svgUrl?: string };
+            supply: string;
+            owner: string;
+        };
 
-        // Map Chain Data to TokenDB structure
         return {
             name: data.name,
-            symbol: data.identifier, // Real identifier
+            symbol: data.identifier,
             description: "On-chain asset. Detailed lore not available.",
             logo_url: data.assets?.pngUrl || data.assets?.svgUrl || '',
-            banner_url: '', // API doesn't usually provide header image
-            risk_score: 50, // Neutral score for unknown tokens
+            banner_url: '',
+            risk_score: 50,
             total_supply: data.supply,
             category: "Utility",
             tone: "Serious",
@@ -73,7 +81,33 @@ const fetchTokenFromChain = async (symbol: string): Promise<TokenDB | null> => {
     }
 };
 
+// Helper to save to local storage
+const saveToLocal = (key: string, item: any) => {
+    try {
+        const current = JSON.parse(localStorage.getItem(key) || '[]');
+        localStorage.setItem(key, JSON.stringify([item, ...current]));
+    } catch (e) {
+        console.error("Local storage save failed:", e);
+    }
+};
+
+// Helper to get from local storage
+const getFromLocal = <T>(key: string, creatorAddress?: string): T[] => {
+    try {
+        const items = JSON.parse(localStorage.getItem(key) || '[]');
+        if (creatorAddress) {
+            return items.filter((i: any) => i.creator_address === creatorAddress);
+        }
+        return items;
+    } catch (e) {
+        return [];
+    }
+};
+
 export const saveToken = async (tokenData: TokenDB) => {
+    // Optimistically save to local storage first
+    saveToLocal(STORAGE_KEYS.TOKENS, { ...tokenData, id: `local-${Date.now()}`, created_at: new Date().toISOString() });
+
     try {
         const { data, error } = await supabase
             .from('tokens')
@@ -83,28 +117,42 @@ export const saveToken = async (tokenData: TokenDB) => {
         if (error) throw error;
         return data?.[0] || tokenData;
     } catch (error) {
-        console.warn('Supabase save failed (Offline Mode?):', error);
-        // Return input data so UI proceeds pretending it saved
+        console.warn('Supabase save failed, using local storage:', error);
         return tokenData;
     }
 };
 
-export const getTokens = async () => {
+export const getTokens = async (creatorAddress?: string, limit?: number) => {
+    const localTokens = getFromLocal(STORAGE_KEYS.TOKENS, creatorAddress);
+
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('tokens')
             .select('*')
             .order('created_at', { ascending: false });
 
+        if (creatorAddress) {
+            query = query.eq('creator_address', creatorAddress);
+        }
+
+        if (limit) {
+            query = query.limit(limit);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
-        return data as TokenDB[];
+
+        // Merge local/remote, prefer remote if duplicates (simple approach: just concat)
+        return [...localTokens, ...(data || [])];
     } catch (error) {
-        console.warn('Supabase fetch failed:', error);
-        return [];
+        console.warn('Supabase fetch failed, returning local tokens:', error);
+        return localTokens;
     }
 };
 
 export const saveNFT = async (nftData: NFTDB) => {
+    saveToLocal(STORAGE_KEYS.NFTS, { ...nftData, id: `local-${Date.now()}`, created_at: new Date().toISOString() });
+
     try {
         const { data, error } = await supabase
             .from('nfts')
@@ -114,23 +162,31 @@ export const saveNFT = async (nftData: NFTDB) => {
         if (error) throw error;
         return data?.[0] || nftData;
     } catch (error) {
-        console.warn('Supabase save NFT failed:', error);
+        console.warn('Supabase save NFT failed, using local storage:', error);
         return nftData;
     }
 };
 
-export const getNFTs = async () => {
+export const getNFTs = async (creatorAddress?: string): Promise<NFTDB[]> => {
+    const localNFTs = getFromLocal<NFTDB>(STORAGE_KEYS.NFTS, creatorAddress);
+
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('nfts')
             .select('*')
             .order('created_at', { ascending: false });
 
+        if (creatorAddress) {
+            query = query.eq('creator_address', creatorAddress);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
-        return data as NFTDB[];
+
+        return [...localNFTs, ...((data as NFTDB[]) || [])];
     } catch (error) {
-        console.warn('Supabase fetch NFTs failed:', error);
-        return [];
+        console.warn('Supabase fetch NFTs failed, returning local:', error);
+        return localNFTs;
     }
 };
 
@@ -150,8 +206,44 @@ export const listNFT = async (nftId: string, price: string) => {
     }
 };
 
+export const buyNFT = async (nftId: string, buyerAddress: string) => {
+    try {
+        // 1. Update in DB
+        const { data, error } = await supabase
+            .from('nfts')
+            .update({
+                creator_address: buyerAddress,
+                is_listed: false,
+                price: null
+            })
+            .eq('id', nftId)
+            .select();
+
+        // 2. Update Local Storage (Mock)
+        const localNFTs = getFromLocal<NFTDB>(STORAGE_KEYS.NFTS);
+        const updatedLocal = localNFTs.map(n =>
+            n.id === nftId
+                ? { ...n, creator_address: buyerAddress, is_listed: false, price: undefined }
+                : n
+        );
+        localStorage.setItem(STORAGE_KEYS.NFTS, JSON.stringify(updatedLocal));
+
+        if (error) throw error;
+        return data?.[0];
+    } catch (error) {
+        console.warn('Supabase buy NFT failed (using local fallback):', error);
+        // Fallback return for local-only mode
+        return { id: nftId, owner: buyerAddress };
+    }
+};
+
 export const getTokenBySymbol = async (symbol: string) => {
-    // 1. Try DB
+    // 1. Check Local
+    const localTokens = getFromLocal<TokenDB>(STORAGE_KEYS.TOKENS);
+    const found = localTokens.find((t: TokenDB) => t.symbol === symbol);
+    if (found) return found;
+
+    // 2. Try DB
     try {
         const { data, error } = await supabase
             .from('tokens')
@@ -166,11 +258,10 @@ export const getTokenBySymbol = async (symbol: string) => {
         console.warn("DB Fetch failed, falling back to chain");
     }
 
-    // 2. Fallback to Chain
+    // 3. Fallback to Chain
     const chainData = await fetchTokenFromChain(symbol);
     if (chainData) return chainData;
 
-    // 3. Return null if absolutely nothing found
     return null;
 };
 
