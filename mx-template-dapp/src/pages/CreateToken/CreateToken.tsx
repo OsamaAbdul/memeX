@@ -21,6 +21,7 @@ import { saveToken, uploadImageFromUrl } from '@/lib/services/supabase/supabase'
 import confetti from 'canvas-confetti';
 import { useNavigate } from 'react-router-dom';
 import { RouteNamesEnum } from '@/localConstants';
+import { contractAddress } from '@/config';
 
 const agents = [
     { id: 'architect', name: 'Token Architect', icon: Brain, color: 'text-blue-400' },
@@ -43,6 +44,11 @@ export const CreateToken = () => {
     const [isAutoPilot, setIsAutoPilot] = useState(false);
     const [selectedTone, setSelectedTone] = useState('Chaotic');
     const [selectedCategory, setSelectedCategory] = useState('Meme');
+
+    // New State for Multi-Step Launch
+    const [launchStep, setLaunchStep] = useState<'issue' | 'activate'>('issue');
+    const [issuedTokenId, setIssuedTokenId] = useState('');
+
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
@@ -75,10 +81,6 @@ export const CreateToken = () => {
             setGenerating(false);
 
             if (isAutoPilot) {
-                // If autopilot is on, we'll try to trigger the launch immediately
-                // However, handleSignAndLaunch needs activeGeneration to be set, 
-                // and state updates are async. In a real app, we'd pass the data directly.
-                // For this demo, we'll move to review but set a high-speed transition.
                 setStep('review');
                 setTimeout(() => {
                     const signBtn = document.getElementById('autopilot-action');
@@ -94,81 +96,151 @@ export const CreateToken = () => {
         }
     };
 
-    const handleSignAndLaunch = async () => {
+    const handleIssueToken = async () => {
         try {
             if (!activeGeneration?.architect) return;
-
+            const account = { nonce: 0 }; // In a real app we fetch nonce, but signAndSend handles it via provider usually or we fetch it.
+            // Actually signAndSendTransactions uses provider which handles nonce usually, but the helper might need it. 
+            // The previous code fetched it.
             const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
-            const account = await proxyProvider.getAccount(new Address(address));
+            const onChainAccount = await proxyProvider.getAccount(new Address(address));
 
-            // Create a payload that simulates a token issuance
-            // format: issue@NAME@SYMBOL@SUPPLY@DECIMALS
             const nameHex = Buffer.from(activeGeneration.architect.name).toString('hex');
             const symbolHex = Buffer.from(activeGeneration.architect.symbol).toString('hex');
-            const supplyHex = BigInt(activeGeneration.architect.tokenomics.totalSupply.replace(/,/g, '')).toString(16);
+            const supplyBig = BigInt(activeGeneration.architect.tokenomics.totalSupply.replace(/,/g, ''));
+            const supplyHex = supplyBig.toString(16);
+
+            // Issue Transaction
+            // Receiver: System Contract for Issuance
+            const systemContract = new Address("erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqzllls8a5w6u");
+
+            const issueTransaction = new Transaction({
+                value: BigInt("50000000000000000"), // 0.05 EGLD
+                data: new TextEncoder().encode(`issue@${nameHex}@${symbolHex}@${supplyHex}@12`),
+                receiver: systemContract,
+                gasLimit: BigInt(60000000),
+                chainID: network.chainId,
+                sender: new Address(address),
+                nonce: onChainAccount.nonce,
+                version: 2
+            });
+
+            await signAndSendTransactions({
+                transactions: [issueTransaction],
+                transactionsDisplayInfo: {
+                    processingMessage: 'Issuing Token on Network...',
+                    errorMessage: 'Issuance failed',
+                    successMessage: 'Token Issued Successfully! Please proceed to activation.'
+                }
+            });
+
+            // Move to next step
+            setLaunchStep('activate');
+
+        } catch (e) {
+            console.error("Issuance failed:", e);
+        }
+    };
+
+    const handleActivateMarket = async () => {
+        if (!issuedTokenId) {
+            alert("Please enter the Token Identifier from your wallet (e.g., MEME-123456)");
+            return;
+        }
+
+        try {
+            if (!activeGeneration?.architect) return;
+            const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
+            const onChainAccount = await proxyProvider.getAccount(new Address(address));
+
+            const supplyBig = BigInt(activeGeneration.architect.tokenomics.totalSupply.replace(/,/g, ''));
+            const supplyHex = supplyBig.toString(16);
+            const tokenIdHex = Buffer.from(issuedTokenId).toString('hex');
+
+            // Define Virtual EGLD Reserve (e.g. 100 EGLD)
+            const virtualEgld = BigInt("100000000000000000000"); // 100 EGLD
+            const virtualEgldHex = virtualEgld.toString(16);
+            if (virtualEgldHex.length % 2 !== 0) { /* pad */ } // Buffer handles it?
+
+            // ESDTTransfer@TokenID@Amount@Function@Args
+            // We use 'launch_token' function
+            // Arg1: Virtual EGLD Amount
+
+            // Need correct even length hex
+            const safeHex = (val: string) => val.length % 2 !== 0 ? '0' + val : val;
+
+            const dataString = `ESDTTransfer@${safeHex(tokenIdHex)}@${safeHex(supplyHex)}@${Buffer.from('launch_token').toString('hex')}@${safeHex(virtualEgldHex)}`;
 
             const launchTransaction = new Transaction({
                 value: BigInt(0),
-                data: new TextEncoder().encode(`issue@${nameHex}@${symbolHex}@${supplyHex}@12`),
-                receiver: new Address(address),
-                gasLimit: BigInt(500000),
+                data: new TextEncoder().encode(dataString),
+                receiver: new Address(contractAddress),
+                gasLimit: BigInt(10000000), // High gas for safety
                 chainID: network.chainId,
                 sender: new Address(address),
-                nonce: account.nonce,
+                nonce: onChainAccount.nonce,
                 version: 2
             });
 
             await signAndSendTransactions({
                 transactions: [launchTransaction],
                 transactionsDisplayInfo: {
-                    processingMessage: 'Launching your meme to the moon...',
-                    errorMessage: 'Launch aborted by the space kraken',
-                    successMessage: 'Token is LIVE! 🚀'
+                    processingMessage: 'Initializing Bonding Curve...',
+                    errorMessage: 'Activation failed',
+                    successMessage: 'Market Active! 🚀'
                 }
             });
 
-            // Permanent Storage for AI Art
-            let finalLogoUrl = activeGeneration.branding?.logoUrl || '';
-            let finalBannerUrl = activeGeneration.branding?.bannerUrl || '';
-
-            if (finalLogoUrl) {
-                finalLogoUrl = await uploadImageFromUrl(finalLogoUrl, `${activeGeneration.architect.symbol}_logo`);
-            }
-            if (finalBannerUrl) {
-                finalBannerUrl = await uploadImageFromUrl(finalBannerUrl, `${activeGeneration.architect.symbol}_banner`);
-            }
-
-            // Save to Supabase
-            await saveToken({
-                name: activeGeneration.architect.name,
-                symbol: activeGeneration.architect.symbol,
-                description: activeGeneration.architect.description,
-                logo_url: finalLogoUrl,
-                banner_url: finalBannerUrl,
-                risk_score: activeGeneration.risk?.riskScore || 0,
-                total_supply: activeGeneration.architect.tokenomics.totalSupply,
-                category: activeGeneration.architect.category,
-                tone: activeGeneration.architect.tone,
-                tagline: activeGeneration.branding?.tagline || '',
-                creator_address: address
-            });
-
-            confetti({
-                particleCount: 150,
-                spread: 70,
-                origin: { y: 0.6 },
-                colors: ['#ff00ff', '#00ffff', '#ffffff']
-            });
-
-            // Navigate to the newly created token page
-            setTimeout(() => {
-                navigate(RouteNamesEnum.dashboardOverview);
-            }, 3000);
+            // Save to DB and Finish
+            await handlePostLaunch();
 
         } catch (e) {
-            console.error("Signing failed:", e);
+            console.error("Activation failed:", e);
         }
-    };
+    }
+
+    const handlePostLaunch = async () => {
+        // Permanent Storage for AI Art
+        let finalLogoUrl = activeGeneration.branding?.logoUrl || '';
+        let finalBannerUrl = activeGeneration.branding?.bannerUrl || '';
+
+        if (finalLogoUrl) {
+            finalLogoUrl = await uploadImageFromUrl(finalLogoUrl, `${activeGeneration.architect.symbol}_logo`);
+        }
+        if (finalBannerUrl) {
+            finalBannerUrl = await uploadImageFromUrl(finalBannerUrl, `${activeGeneration.architect.symbol}_banner`);
+        }
+
+        // Save to Supabase
+        await saveToken({
+            name: activeGeneration.architect.name,
+            symbol: fixedTokenId(), // Store the real ID
+            description: activeGeneration.architect.description,
+            logo_url: finalLogoUrl,
+            banner_url: finalBannerUrl,
+            risk_score: activeGeneration.risk?.riskScore || 0,
+            total_supply: activeGeneration.architect.tokenomics.totalSupply,
+            category: activeGeneration.architect.category,
+            tone: activeGeneration.architect.tone,
+            tagline: activeGeneration.branding?.tagline || '',
+            creator_address: address
+        });
+
+        confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#ff00ff', '#00ffff', '#ffffff']
+        });
+
+        // Navigate to the newly created token page
+        setTimeout(() => {
+            navigate(RouteNamesEnum.dashboardOverview);
+        }, 3000);
+    }
+
+    // Helper to get symbol/id
+    const fixedTokenId = () => issuedTokenId || activeGeneration.architect.symbol;
 
     return (
         <div className="max-w-4xl mx-auto py-12 px-4 min-h-[70vh] flex flex-col items-center justify-center">
@@ -357,23 +429,49 @@ export const CreateToken = () => {
                                     </p>
                                 </div>
 
-                                <div className="flex gap-4 pt-4">
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setStep('input')}
-                                        className="flex-1 bg-transparent border-slate-700 text-slate-400 hover:text-white"
-                                    >
-                                        REGENERATE
-                                    </Button>
-                                    <Button
-                                        id="autopilot-action"
-                                        onClick={handleSignAndLaunch}
-                                        className="flex-grow bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center gap-2"
-                                    >
-                                        <Rocket className="h-5 w-5" />
-                                        SIGN & LAUNCH
-                                    </Button>
-                                </div>
+                                {/* Step 1: Issue */}
+                                {launchStep === 'issue' && (
+                                    <div className="flex gap-4 pt-4">
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setStep('input')}
+                                            className="flex-1 bg-transparent border-slate-700 text-slate-400 hover:text-white"
+                                        >
+                                            REGENERATE
+                                        </Button>
+                                        <Button
+                                            id="autopilot-action"
+                                            onClick={handleIssueToken}
+                                            className="flex-grow bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center gap-2"
+                                        >
+                                            <Rocket className="h-5 w-5" />
+                                            STEP 1: ISSUE TOKEN
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {/* Step 2: Activate */}
+                                {launchStep === 'activate' && (
+                                    <div className="space-y-4 pt-2">
+                                        <div className="bg-green-500/10 p-3 rounded-xl border border-green-500/20">
+                                            <p className="text-green-400 text-xs text-center font-bold">Step 1 Complete! Now check your wallet/explorer for the Token Identifier (e.g. MEME-123456) and enter it below.</p>
+                                        </div>
+                                        <input
+                                            value={issuedTokenId}
+                                            onChange={(e) => setIssuedTokenId(e.target.value)}
+                                            placeholder="Enter Token Identifier (e.g. TICKER-123456)"
+                                            className="w-full bg-slate-950 border border-white/20 rounded-xl p-3 text-white font-mono text-center outline-none focus:border-neon-pink"
+                                        />
+                                        <Button
+                                            onClick={handleActivateMarket}
+                                            className="w-full bg-crypto-green hover:bg-green-400 text-black font-bold h-12 flex items-center gap-2 justify-center"
+                                            disabled={!issuedTokenId}
+                                        >
+                                            <Rocket className="h-5 w-5" />
+                                            STEP 2: ACTIVATE MARKET
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </motion.div>

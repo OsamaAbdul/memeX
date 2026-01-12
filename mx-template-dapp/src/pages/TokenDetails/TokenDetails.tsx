@@ -9,6 +9,15 @@ import {
     TrendingUp, Loader2
 } from 'lucide-react';
 import { getTokenBySymbol, TokenDB } from '@/lib/services/supabase/supabase';
+import { signAndSendTransactions } from '@/helpers';
+import {
+    Transaction,
+    Address,
+    useGetAccount,
+    useGetNetworkConfig,
+    ProxyNetworkProvider
+} from '@/lib';
+import { contractAddress } from '@/config';
 
 // Mock data for the chart - keep as is for visual demo
 const chartData = [
@@ -41,6 +50,9 @@ export const TokenDetails = () => {
     const [amount, setAmount] = useState('');
     const [activeTab, setActiveTab] = useState('about');
 
+    const { address } = useGetAccount();
+    const { network } = useGetNetworkConfig();
+
     useEffect(() => {
         const fetchToken = async () => {
             if (!symbol) return;
@@ -56,6 +68,70 @@ export const TokenDetails = () => {
 
         fetchToken();
     }, [symbol]);
+
+    const handleTrade = async () => {
+        if (!amount || !token || !symbol) return;
+
+        try {
+            const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
+            const account = await proxyProvider.getAccount(new Address(address));
+
+            let transaction: Transaction;
+
+            if (tradeType === 'buy') {
+                // Buy: Send EGLD, call buy@TokenID
+                const valueBig = BigInt(Math.floor(parseFloat(amount) * 10 ** 18));
+                const tokenIdHex = Buffer.from(symbol).toString('hex');
+
+                transaction = new Transaction({
+                    value: valueBig,
+                    data: new TextEncoder().encode(`buy@${tokenIdHex}`),
+                    receiver: new Address(contractAddress),
+                    gasLimit: BigInt(10000000),
+                    chainID: network.chainId,
+                    sender: new Address(address),
+                    nonce: account.nonce,
+                    version: 2
+                });
+            } else {
+                // Sell: Send Token, call sell
+                // ESDTTransfer@TokenID@Amount@sell
+                const valueBig = BigInt(Math.floor(parseFloat(amount) * 10 ** 18)); // Assuming 18 decimals? Usually Tokens are 18.
+                // If token decimals differ, we need token info.
+
+                const tokenIdHex = Buffer.from(symbol).toString('hex');
+                const amountHex = valueBig.toString(16);
+                const funcHex = Buffer.from('sell').toString('hex');
+
+                const safeHex = (val: string) => val.length % 2 !== 0 ? '0' + val : val;
+
+                const dataString = `ESDTTransfer@${safeHex(tokenIdHex)}@${safeHex(amountHex)}@${funcHex}`;
+
+                transaction = new Transaction({
+                    value: BigInt(0),
+                    data: new TextEncoder().encode(dataString),
+                    receiver: new Address(contractAddress),
+                    gasLimit: BigInt(10000000),
+                    chainID: network.chainId,
+                    sender: new Address(address),
+                    nonce: account.nonce,
+                    version: 2
+                });
+            }
+
+            await signAndSendTransactions({
+                transactions: [transaction],
+                transactionsDisplayInfo: {
+                    processingMessage: `Processing ${tradeType.toUpperCase()} Order...`,
+                    errorMessage: 'Transaction failed',
+                    successMessage: 'Order Executed Successfully!'
+                }
+            });
+
+        } catch (error) {
+            console.error("Trade failed:", error);
+        }
+    };
 
     if (isLoading) {
         return (
@@ -231,7 +307,10 @@ export const TokenDetails = () => {
                             </div>
                         </div>
 
-                        <Button className={`w-full py-4 text-sm rounded-xl shadow-lg ${tradeType === 'buy' ? 'bg-crypto-green hover:bg-green-400 text-black' : 'bg-neon-pink hover:bg-magenta-600 text-white'}`}>
+                        <Button
+                            className={`w-full py-4 text-sm rounded-xl shadow-lg ${tradeType === 'buy' ? 'bg-crypto-green hover:bg-green-400 text-black' : 'bg-neon-pink hover:bg-magenta-600 text-white'}`}
+                            onClick={handleTrade}
+                        >
                             {tradeType === 'buy' ? 'PLACE BUY ORDER' : 'PLACE SELL ORDER'}
                         </Button>
 

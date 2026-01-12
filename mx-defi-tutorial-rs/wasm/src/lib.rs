@@ -15,9 +15,13 @@ multiversx_sc_wasm_adapter::allocator!();
 multiversx_sc_wasm_adapter::panic_handler!();
 
 multiversx_sc_wasm_adapter::endpoints! {
-    escrow
+    launchpad
     (
         init => init
+        launch_token => launch_token
+        buy => buy
+        sell => sell
+        getAmountOut => get_amount_out
     )
 }
 

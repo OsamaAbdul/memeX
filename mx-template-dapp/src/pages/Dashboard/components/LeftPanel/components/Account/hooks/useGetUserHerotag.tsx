@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
-import { ID_API_URL, USERS_API_URL } from 'config/config.mainnet';
+import { ID_API_URL, USERS_API_URL } from 'config'; // Use generic config
 import { useGetAccount } from 'lib';
 
 const getUserProfileData = async (address?: string) => {
@@ -9,13 +9,18 @@ const getUserProfileData = async (address?: string) => {
   }
 
   try {
+    // If URLs are missing or dummy, this might fail. We handle it silently.
+    if (!ID_API_URL || !USERS_API_URL) return null;
+
     const { data } = await axios.get(`${USERS_API_URL}${address}`, {
       baseURL: ID_API_URL
     });
 
     return data;
   } catch (err) {
-    console.error('Unable to fetch profile url');
+    // Suppress error log for profile fetch as it's optional and fails on devnet usually
+    // console.error('Unable to fetch profile url');
+    return null;
   }
 };
 
@@ -31,8 +36,10 @@ export const useGetUserHerotag = () => {
 
     const fetchUserProfileUrl = async () => {
       const data = await getUserProfileData(address);
-      setProfileUrl(data?.profile?.url);
-      setHerotag(data?.herotag);
+      if (data) {
+        setProfileUrl(data?.profile?.url);
+        setHerotag(data?.herotag);
+      }
     };
 
     fetchUserProfileUrl();
