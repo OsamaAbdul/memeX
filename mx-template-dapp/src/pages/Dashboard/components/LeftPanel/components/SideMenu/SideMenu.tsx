@@ -17,7 +17,17 @@ import { MenuItemsType, SideMenuPropsType } from './sideMenu.types';
 
 const menuItems = [
   {
-    title: 'Mint NFT',
+    title: 'Overview',
+    icon: faChartLine,
+    path: RouteNamesEnum.dashboardOverview
+  },
+  {
+    title: 'Launch Token',
+    icon: faRocket,
+    path: RouteNamesEnum.dashboardCreate
+  },
+  {
+    title: 'Launch NFT',
     icon: faPalette,
     path: RouteNamesEnum.dashboardCreateNFT
   },
@@ -25,16 +35,6 @@ const menuItems = [
     title: 'NFT Market',
     icon: faGem,
     path: RouteNamesEnum.dashboardNFTs
-  },
-  {
-    title: 'Overview',
-    icon: faChartLine,
-    path: RouteNamesEnum.dashboardOverview
-  },
-  {
-    title: 'My Profile',
-    icon: faUser,
-    path: RouteNamesEnum.dashboardProfile
   }
 ];
 

@@ -1,66 +1,120 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, Search, Filter, Loader2, Sparkles, User } from 'lucide-react';
+import { TrendingUp, Search, Filter, Loader2, Sparkles, User, BadgeCent, Gem, Images } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TokenCard } from '@/components/launchpad/TokenCard';
-import { getTokens, TokenDB } from '@/lib/services/supabase/supabase';
+import { NFTCard } from '@/components/launchpad/NFTCard';
+import { getTokens, TokenDB, getNFTs, NFTDB, buyNFT } from '@/lib/services/supabase/supabase';
 import { useGetAccount } from '@/lib';
 
 export const Overview = () => {
     const { address } = useGetAccount();
     const [tokens, setTokens] = useState<TokenDB[]>([]);
+    const [nfts, setNfts] = useState<NFTDB[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState<'all' | 'my'>('all');
+    const [itemType, setItemType] = useState<'all' | 'meme' | 'nft'>('all');
 
     useEffect(() => {
-        const fetchTokens = async () => {
+        const fetchData = async () => {
             setIsLoading(true);
             try {
-                // If viewMode is 'my' and we have an address, filter by it.
-                // Otherwise fetch all.
                 const creatorFilter = (viewMode === 'my' && address) ? address : undefined;
-                const data = await getTokens(creatorFilter);
-                setTokens(data);
+
+                const [tokensData, nftsData] = await Promise.all([
+                    getTokens(creatorFilter),
+                    getNFTs(creatorFilter)
+                ]);
+
+                setTokens(tokensData);
+                setNfts(nftsData);
             } catch (error) {
-                console.error("Failed to fetch tokens:", error);
+                console.error("Failed to fetch data:", error);
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchTokens();
+        fetchData();
     }, [viewMode, address]);
 
-    const filteredTokens = tokens.filter(t =>
-        t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.symbol.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Combined Filter Logic
+    const filteredItems = [
+        ...tokens.map(t => ({ ...t, type: 'meme' })),
+        ...nfts.map(n => ({ ...n, type: 'nft' }))
+    ].filter(item => {
+        // Search Filter
+        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.description && item.description.toLowerCase().includes(searchTerm.toLowerCase()));
+
+        // Type Filter
+        if (itemType === 'meme' && item.type !== 'meme') return false;
+        if (itemType === 'nft' && item.type !== 'nft') return false;
+
+        return matchesSearch;
+    });
+
+    const handleBuyNFT = async (id: string, price: string) => {
+        if (!address) return alert("Connect wallet first!");
+        if (confirm(`Buy NFT for ${price} EGLD?`)) {
+            await buyNFT(id, address);
+            alert("Bought!");
+            window.location.reload();
+        }
+    };
 
     return (
         <div className="space-y-8 pb-20">
             {/* Header / Tabs */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-6">
                 <div>
-                    <h1 className="text-4xl font-bangers text-white uppercase tracking-widest">Meme Dashboard</h1>
-                    <p className="text-slate-500 text-sm">Track the hottest tokens on MultiversX</p>
+                    <h1 className="text-4xl font-bangers text-white uppercase tracking-widest">Dashboard</h1>
+                    <p className="text-slate-500 text-sm">Track your portfolio and the hottest launches.</p>
                 </div>
 
-                <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5">
-                    <button
-                        onClick={() => setViewMode('all')}
-                        className={`px-6 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'all' ? 'bg-neon-pink text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        <TrendingUp className="h-3 w-3" /> ALL MEMES
-                    </button>
-                    {address && (
+                <div className="flex gap-4">
+                    {/* View Mode Switch (All Launches vs My Launches) */}
+                    <div className="flex bg-slate-900/50 p-1 rounded-xl border border-white/5">
                         <button
-                            onClick={() => setViewMode('my')}
-                            className={`px-6 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'my' ? 'bg-neon-pink text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                            onClick={() => setViewMode('all')}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'all' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
                         >
-                            <User className="h-3 w-3" /> MY LAUNCHES
+                            <TrendingUp className="h-3 w-3" /> ALL
                         </button>
-                    )}
+                        {address && (
+                            <button
+                                onClick={() => setViewMode('my')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'my' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                <User className="h-3 w-3" /> MINE
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Type Filter Tabs */}
+            <div className="flex justify-center">
+                <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-white/10 shadow-2xl">
+                    <button
+                        onClick={() => setItemType('all')}
+                        className={`px-8 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${itemType === 'all' ? 'bg-neon-pink text-white shadow-[0_0_15px_rgba(255,0,255,0.4)]' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        <Sparkles className="h-4 w-4" /> EVERYTHING
+                    </button>
+                    <button
+                        onClick={() => setItemType('meme')}
+                        className={`px-8 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${itemType === 'meme' ? 'bg-neon-blue text-slate-950 shadow-[0_0_15px_rgba(0,255,255,0.4)]' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        <BadgeCent className="h-4 w-4" /> MEMECOINS
+                    </button>
+                    <button
+                        onClick={() => setItemType('nft')}
+                        className={`px-8 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${itemType === 'nft' ? 'bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]' : 'text-slate-400 hover:text-white'}`}
+                    >
+                        <Images className="h-4 w-4" /> NFTS
+                    </button>
                 </div>
             </div>
 
@@ -72,14 +126,9 @@ export const Overview = () => {
                         type="text"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search memes by name or ticker..."
+                        placeholder="Search..."
                         className="w-full bg-slate-950 border border-white/5 rounded-xl py-3 pl-12 pr-4 text-white focus:border-neon-pink outline-none transition-all placeholder:text-slate-600"
                     />
-                </div>
-                <div className="flex gap-3 w-full md:w-auto">
-                    <Button variant="outline" className="flex-1 md:flex-none border-white/5 bg-slate-950 text-slate-400 gap-2 hover:text-white">
-                        <Filter className="h-4 w-4" /> Filter
-                    </Button>
                 </div>
             </div>
 
@@ -89,19 +138,35 @@ export const Overview = () => {
                     <Loader2 className="h-12 w-12 text-neon-pink animate-spin" />
                     <p className="text-slate-500 font-mono animate-pulse">Syncing with MultiversX...</p>
                 </div>
-            ) : filteredTokens.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            ) : filteredItems.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <AnimatePresence mode="popLayout">
-                        {filteredTokens.map((token, index) => (
-                            <TokenCard
-                                key={token.id || index}
-                                name={token.name}
-                                ticker={token.symbol}
-                                description={token.description}
-                                imageUrl={token.logo_url}
-                                marketCap={token.total_supply} // For demo purpose
-                                replies={Math.floor(Math.random() * 50)} // Simulated
-                            />
+                        {filteredItems.map((item, index) => (
+                            item.type === 'meme' ? (
+                                <TokenCard
+                                    key={`meme-${item.id || index}`}
+                                    name={item.name}
+                                    ticker={(item as TokenDB).symbol}
+                                    description={item.description}
+                                    imageUrl={(item as TokenDB).logo_url}
+                                    marketCap={(item as TokenDB).total_supply}
+                                    replies={0}
+                                />
+                            ) : (
+                                <NFTCard
+                                    key={`nft-${item.id || index}`}
+                                    id={item.id!}
+                                    name={item.name}
+                                    description={item.description}
+                                    imageUrl={(item as NFTDB).image_url}
+                                    rarityScore={(item as NFTDB).rarity_score}
+                                    category={(item as NFTDB).category}
+                                    isListed={(item as NFTDB).is_listed}
+                                    price={(item as NFTDB).price}
+                                    onBuy={handleBuyNFT}
+                                    onList={() => { }}
+                                />
+                            )
                         ))}
                     </AnimatePresence>
                 </div>
@@ -111,15 +176,9 @@ export const Overview = () => {
                         <Sparkles className="h-12 w-12 text-slate-700" />
                     </div>
                     <div className="space-y-2">
-                        <h3 className="text-2xl font-bold text-white">No memes found</h3>
-                        <p className="text-slate-500 max-w-xs">{viewMode === 'my' ? "You haven't launched any memes yet." : "Be the first to launch a meme on the moon!"}</p>
+                        <h3 className="text-2xl font-bold text-white">Nothing found</h3>
+                        <p className="text-slate-500 max-w-xs">Try adjusting your filters or launch something new!</p>
                     </div>
-                    <Button
-                        onClick={() => window.location.href = '/dashboard/create'}
-                        className="bg-neon-pink hover:bg-magenta-600 text-white px-8 rounded-xl font-bold"
-                    >
-                        LAUNCH NOW
-                    </Button>
                 </div>
             )}
         </div>

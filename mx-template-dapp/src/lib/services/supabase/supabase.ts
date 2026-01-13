@@ -269,23 +269,35 @@ export const uploadImageFromUrl = async (url: string, fileName: string) => {
     try {
         const response = await fetch(url);
         const blob = await response.blob();
-        const filePath = `${Date.now()}_${fileName}.png`;
-
-        const { data, error } = await supabase.storage
-            .from('token-images')
-            .upload(filePath, blob, {
-                contentType: 'image/png'
-            });
-
-        if (error) throw error;
-
-        const { data: { publicUrl } } = supabase.storage
-            .from('token-images')
-            .getPublicUrl(filePath);
-
-        return publicUrl;
+        return await uploadBlob(blob, fileName);
     } catch (error) {
         console.warn('Error uploading image to storage (returning original):', error);
         return url;
     }
+};
+
+export const uploadImageFromFile = async (file: File, fileName: string) => {
+    try {
+        return await uploadBlob(file, fileName);
+    } catch (error) {
+        console.warn("Error uploading file:", error);
+        return URL.createObjectURL(file); // Fallback to local preview
+    }
+};
+
+const uploadBlob = async (blob: Blob | File, fileName: string) => {
+    const filePath = `${Date.now()}_${fileName}.png`;
+    const { data, error } = await supabase.storage
+        .from('token-images')
+        .upload(filePath, blob, {
+            contentType: 'image/png'
+        });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('token-images')
+        .getPublicUrl(filePath);
+
+    return publicUrl;
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Rocket, Brain, Palette, ShieldCheck, Cpu, ArrowRight, Loader2, AlertTriangle, CheckCircle2, Wand2 } from 'lucide-react';
+import { Rocket, Brain, Palette, ShieldCheck, Cpu, ArrowRight, Loader2, AlertTriangle, CheckCircle2, Wand2, Upload, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -15,14 +15,14 @@ import {
     Address,
     useGetAccount,
     useGetNetworkConfig,
-    ProxyNetworkProvider
+    ProxyNetworkProvider,
+    useGetPendingTransactions
 } from '@/lib';
-import { saveToken, uploadImageFromUrl } from '@/lib/services/supabase/supabase';
+import { saveToken, uploadImageFromUrl, uploadImageFromFile } from '@/lib/services/supabase/supabase';
 import confetti from 'canvas-confetti';
 import { useNavigate } from 'react-router-dom';
 import { RouteNamesEnum } from '@/localConstants';
-import { contractAddress } from '@/config';
-import { createLaunchTransaction } from '@/lib/services/launchpad';
+import { createLaunchTransaction, getUserTokensFromChain } from '@/lib/services/launchpad';
 import DefaultLogo from '@/assets/img/-llxs6r.jpg';
 
 const agents = [
@@ -47,10 +47,16 @@ export const CreateToken = () => {
     const [selectedTone, setSelectedTone] = useState('Chaotic');
     const [selectedCategory, setSelectedCategory] = useState('Meme');
 
+    // Custom Image State
+    const [customFile, setCustomFile] = useState<File | null>(null);
+    const [customPreview, setCustomPreview] = useState<string>('');
+
     // New State for Multi-Step Launch
-    const [launchStep, setLaunchStep] = useState<'issue' | 'activate'>('issue');
+    const [issueSessionId, setIssueSessionId] = useState<string | null>(null);
+    const [launchStep, setLaunchStep] = useState<'issue' | 'finding' | 'activate'>('issue');
     const [issuedTokenId, setIssuedTokenId] = useState('');
     const [isSigning, setIsSigning] = useState(false);
+    const [isPollingToken, setIsPollingToken] = useState(false);
 
     // Editable Fields State
     const [customSupply, setCustomSupply] = useState('1,000,000,000');
@@ -59,7 +65,47 @@ export const CreateToken = () => {
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
+    const { pendingTransactions } = useGetPendingTransactions();
     const { isGenerating, setGenerating, setGenerationResult, activeGeneration } = useAppStore();
+
+    // Effect: Watch for Issue Transaction Completion
+    useEffect(() => {
+        if (issueSessionId && launchStep === 'issue') {
+            // Check if the session ID is still pending
+            // Note: pendingTransactions might have different structure depending on SDK version, 
+            // but usually it contains keys or array of pending ones.
+            // We assume if it was there and now isn't, it's done. 
+            // Ideally we need `useGetTransactionsStatus` but for now we fallback to direct token polling
+            // after a delay if we detect completion or just poll continuously.
+
+            // Simplification: Wait 5s then start polling for the token.
+            // Relying on session state is complex without the dedicated hook.
+            // Let's just start polling shortly after sending.
+        }
+    }, [issueSessionId, pendingTransactions]);
+
+    // Polling Logic for Token ID
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (isPollingToken && activeGeneration?.architect?.symbol) {
+            interval = setInterval(async () => {
+                const results = await getUserTokensFromChain(address);
+                // Look for a token that matches the symbol
+                // Note: The identifier will be SYMBOL-123456
+                const symbol = activeGeneration.architect.symbol.toUpperCase();
+                const found = results.find((t: any) => t.identifier.startsWith(symbol));
+
+                if (found) {
+                    setIssuedTokenId(found.identifier);
+                    setIsPollingToken(false);
+                    setLaunchStep('activate');
+                    clearInterval(interval);
+                }
+            }, 3000);
+        }
+        return () => clearInterval(interval);
+    }, [isPollingToken, address, activeGeneration]);
+
 
     const handleGenerate = async (customPrompt?: string) => {
         const finalPrompt = customPrompt || prompt;
@@ -106,9 +152,7 @@ export const CreateToken = () => {
     const handleIssueToken = async () => {
         try {
             if (!activeGeneration?.architect) return;
-            const account = { nonce: 0 }; // In a real app we fetch nonce, but signAndSend handles it via provider usually or we fetch it.
-            // Actually signAndSendTransactions uses provider which handles nonce usually, but the helper might need it. 
-            // The previous code fetched it.
+            setIsSigning(true);
             const proxyProvider = new ProxyNetworkProvider(network.apiAddress);
             const onChainAccount = await proxyProvider.getAccount(new Address(address));
 
@@ -136,19 +180,18 @@ export const CreateToken = () => {
                 version: 2
             });
 
-            await signAndSendTransactions({
+            const sessionId = await signAndSendTransactions({
                 transactions: [issueTransaction],
                 transactionsDisplayInfo: {
                     processingMessage: 'Issuing Token on Network...',
                     errorMessage: 'Issuance failed',
-                    successMessage: 'Token Issued Successfully! Please proceed to activation.'
+                    successMessage: 'Token Issued! Finding it on-chain...'
                 }
             });
 
-            // Move to next step
-            setLaunchStep('activate');
-
-            alert("Transaction sent! Once confirmed, copy the Token ID from your wallet (e.g., MEME-123456) and paste it below.");
+            setIssueSessionId(sessionId);
+            setLaunchStep('finding');
+            setIsPollingToken(true); // Start looking for it immediately 
 
         } catch (e) {
             console.error("Issuance failed:", e);
@@ -158,10 +201,7 @@ export const CreateToken = () => {
     };
 
     const handleActivateMarket = async () => {
-        if (!issuedTokenId) {
-            alert("Please enter the Token Identifier from your wallet (e.g., MEME-123456)");
-            return;
-        }
+        if (!issuedTokenId) return;
 
         setIsSigning(true);
         try {
@@ -205,16 +245,29 @@ export const CreateToken = () => {
         }
     }
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setCustomFile(file);
+            setCustomPreview(URL.createObjectURL(file));
+        }
+    };
+
     const handlePostLaunch = async () => {
         if (!activeGeneration?.architect) return;
 
-        // Permanent Storage for AI Art
-        let finalLogoUrl = activeGeneration.branding?.logoUrl || '';
+        // Permanent Storage for AI Art or Custom Upload
+        let finalLogoUrl = customPreview || activeGeneration.branding?.logoUrl || '';
         let finalBannerUrl = activeGeneration.branding?.bannerUrl || '';
 
-        if (finalLogoUrl) {
+        // If user uploaded a custom file, upload it to storage
+        if (customFile) {
+            finalLogoUrl = await uploadImageFromFile(customFile, `${activeGeneration.architect.symbol}_logo`);
+        } else if (finalLogoUrl) {
+            // Otherwise use the AI URL
             finalLogoUrl = await uploadImageFromUrl(finalLogoUrl, `${activeGeneration.architect.symbol}_logo`);
         }
+
         if (finalBannerUrl) {
             finalBannerUrl = await uploadImageFromUrl(finalBannerUrl, `${activeGeneration.architect.symbol}_banner`);
         }
@@ -378,16 +431,25 @@ export const CreateToken = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start relative z-10">
                             <div className="w-full aspect-square bg-slate-800 rounded-3xl flex items-center justify-center border-2 border-neon-pink/20 relative group overflow-hidden shadow-2xl">
-                                {activeGeneration.branding?.logoUrl ? (
+                                {customPreview || activeGeneration.branding?.logoUrl ? (
                                     <img
-                                        key={activeGeneration.branding.logoUrl}
-                                        src={activeGeneration.branding.logoUrl}
-                                        alt="AI Generated Logo"
+                                        key={customPreview || activeGeneration.branding.logoUrl}
+                                        src={customPreview || activeGeneration.branding.logoUrl}
+                                        alt="Token Logo"
                                         className="w-full h-full object-cover transition-transform group-hover:scale-110 duration-500"
                                     />
                                 ) : (
                                     <Palette className="h-12 w-12 text-slate-600" />
                                 )}
+
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                    <label className="cursor-pointer bg-white text-black font-bold px-4 py-2 rounded-full flex items-center gap-2 hover:scale-105 transition-transform">
+                                        <Upload className="h-4 w-4" />
+                                        Upload Image
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                    </label>
+                                </div>
+
                                 <div className="absolute top-4 right-4 bg-neon-pink/90 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">{activeGeneration.architect.category}</div>
                             </div>
 
@@ -426,46 +488,55 @@ export const CreateToken = () => {
                                 </div>
 
                                 <div className="pt-4 space-y-4">
-                                    <div className="flex gap-4">
-                                        <Button
-                                            variant="outline"
-                                            onClick={() => setStep('input')}
-                                            className="flex-1 bg-transparent border-slate-700 text-slate-400 hover:text-white"
-                                        >
-                                            Try Again
-                                        </Button>
+                                    {/* Simplified Flow UI */}
+                                    <div className="bg-slate-950/80 p-5 rounded-2xl border border-white/10 space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <h3 className="font-bold text-white uppercase tracking-wider text-sm">Launch Progress</h3>
+                                            <span className="text-xs text-slate-500 font-mono">{launchStep === 'issue' || launchStep === 'finding' ? 'Step 1/2' : 'Step 2/2'}</span>
+                                        </div>
 
-                                        {!issuedTokenId ? (
-                                            <Button
-                                                onClick={handleIssueToken}
-                                                className="flex-[2] bg-slate-800 hover:bg-slate-700 text-white font-bold h-12 flex items-center justify-center gap-2 border border-white/10"
-                                            >
-                                                <Cpu className="h-5 w-5" />
-                                                1. Issue Token
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                onClick={handleActivateMarket}
-                                                className="flex-[2] bg-neon-pink hover:bg-magenta-600 text-white font-bold h-12 flex items-center justify-center gap-2"
-                                            >
-                                                <Rocket className="h-5 w-5" />
-                                                2. Launch Market
-                                            </Button>
-                                        )}
+                                        <div className="space-y-2">
+                                            <div className={`p-3 rounded-xl border flex items-center gap-3 transition-colors ${launchStep !== 'activate' ? 'bg-neon-pink/10 border-neon-pink/30' : 'bg-slate-900 border-white/5 opacity-50'}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${launchStep !== 'activate' ? 'bg-neon-pink text-white' : 'bg-slate-800 text-slate-400'}`}>1</div>
+                                                <div className="flex-grow">
+                                                    <div className="text-sm font-bold text-white">Issue Token</div>
+                                                    <div className="text-xs text-slate-400">
+                                                        {launchStep === 'issue' && !isPollingToken && "Create token on-chain (0.05 EGLD)"}
+                                                        {launchStep === 'finding' && <span className="text-neon-pink animate-pulse">Scanning blockchain for Token ID...</span>}
+                                                        {launchStep === 'activate' && "Completed"}
+                                                    </div>
+                                                </div>
+                                                {launchStep === 'issue' && !isPollingToken && !issuedTokenId && (
+                                                    <Button size="sm" onClick={handleIssueToken} className="bg-neon-pink hover:bg-magenta-600 text-white font-bold h-8">
+                                                        ISSUE
+                                                    </Button>
+                                                )}
+                                                {(launchStep === 'finding' || isPollingToken) && <Loader2 className="h-4 w-4 text-neon-pink animate-spin" />}
+                                                {launchStep === 'activate' && <CheckCircle2 className="h-5 w-5 text-green-400" />}
+                                            </div>
+
+                                            <div className={`p-3 rounded-xl border flex items-center gap-3 transition-colors ${launchStep === 'activate' ? 'bg-neon-pink/10 border-neon-pink/30' : 'bg-slate-900 border-white/5 opacity-50'}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${launchStep === 'activate' ? 'bg-neon-pink text-white' : 'bg-slate-800 text-slate-400'}`}>2</div>
+                                                <div className="flex-grow">
+                                                    <div className="text-sm font-bold text-white">Activate Market</div>
+                                                    <div className="text-xs text-slate-400">Enable trading & bonding curve</div>
+                                                </div>
+                                                {launchStep === 'activate' && (
+                                                    <Button size="sm" onClick={handleActivateMarket} className="bg-neon-pink hover:bg-magenta-600 text-white font-bold h-8 animate-pulse">
+                                                        LAUNCH
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div className="bg-slate-950/80 p-3 rounded-lg border border-white/5">
-                                        <label className="text-[10px] text-slate-500 uppercase font-bold tracking-widest block mb-1">
-                                            Token ID (Paste here after Step 1)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. MEME-123456"
-                                            value={issuedTokenId}
-                                            onChange={(e) => setIssuedTokenId(e.target.value)}
-                                            className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white text-xs font-mono focus:border-neon-pink outline-none"
-                                        />
-                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => setStep('input')}
+                                        className="w-full text-slate-500 hover:text-white text-xs"
+                                    >
+                                        Start Over
+                                    </Button>
                                 </div>
                             </div>
                         </div>

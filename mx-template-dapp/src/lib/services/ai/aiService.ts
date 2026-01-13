@@ -131,15 +131,23 @@ export const BrandGeneratorAgent = async (architect: any): Promise<BrandingRespo
 
     const result = await callGemini(systemPrompt, "Generate branding assets.");
 
-    // Use Pollinations.ai (Standard simplified endpoint)
-    // Add a random seed and timestamp to absolutely prevent caching
+    // Use Pollinations.ai (Main Endpoint)
+    // We use the /p/ format which is the robust permalink structure
     const randomSeed = Math.floor(Math.random() * 1000000);
-    const timestamp = Date.now();
-    const uniqueRef = `${randomSeed}-${timestamp}`;
 
-    // The correct format is https://image.pollinations.ai/prompt/{prompt}?width=...
-    const logoUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.logoKeywords || architect.name + ' mascot meme coin logo, high quality, vector style')}?width=512&height=512&seed=${uniqueRef}&nologo=true&model=flux`;
-    const bannerUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(result.bannerKeywords || architect.name + ' abstract cyber crypto banner, 4k, neon')}?width=1200&height=400&seed=${uniqueRef}-banner&nologo=true&model=flux`;
+    // Construct the prompts
+    const logoPrompt = result.logoKeywords
+        ? `${result.logoKeywords}, ${architect.name} logo, vector style, white background`
+        : `${architect.name} mascot meme coin logo, high quality, vector style, white background`;
+
+    const bannerPrompt = result.bannerKeywords
+        ? `${result.bannerKeywords}, ${architect.name} banner, wide, neon, crypto, 4k`
+        : `${architect.name} abstract cyber crypto banner, 4k, neon, wide`;
+
+    // Append seed to prompt to force cache busting on their side if query params are ignored
+    // Use proper image endpoint (not permalink page)
+    const logoUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(logoPrompt)}?width=512&height=512&seed=${randomSeed}&model=flux&nologo=true`;
+    const bannerUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(bannerPrompt)}?width=1200&height=400&seed=${randomSeed}&model=flux&nologo=true`;
 
     return {
         logoCID: "bafybeigdyrzt5sfp7udm7hu76uh7y26igwwjsrvatqjrfatx6ofv7zvyrm",

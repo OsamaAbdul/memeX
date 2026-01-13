@@ -88,14 +88,14 @@ export const Home = () => {
           <Link to={RouteNamesEnum.dashboardCreate}>
             <Button variant="neon" size="lg" className="text-xl px-12 py-8 rounded-full">
               <Rocket className="mr-3 h-6 w-6" />
-              Start Launch
+              Launch Token
             </Button>
           </Link>
 
           <Link to={RouteNamesEnum.dashboardOverview}>
             <Button variant="outline" size="lg" className="text-xl px-12 py-8 rounded-full border-neon-blue text-neon-blue hover:bg-neon-blue/10">
               <TrendingUp className="mr-3 h-6 w-6" />
-              View Charts
+              Dashboard
             </Button>
           </Link>
         </motion.div>

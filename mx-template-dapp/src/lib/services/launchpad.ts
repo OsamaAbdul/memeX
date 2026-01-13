@@ -1,5 +1,5 @@
 import { Transaction, Address } from "@multiversx/sdk-core";
-import { contractAddress } from "@/config";
+import { contractAddress, API_URL } from "@/config";
 
 // Mock IPFS Service
 export const uploadExampleImage = async (file: File): Promise<string> => {
@@ -8,6 +8,18 @@ export const uploadExampleImage = async (file: File): Promise<string> => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     // Return a dummy CID (IPFS Hash)
     return "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG";
+};
+
+// Fetch User Tokens from Chain
+export const getUserTokensFromChain = async (address: string) => {
+    try {
+        const response = await fetch(`${API_URL}/accounts/${address}/tokens?size=100`);
+        if (!response.ok) throw new Error("Failed to fetch tokens");
+        return await response.json(); // Returns array of tokens
+    } catch (e) {
+        console.error("Error fetching user tokens:", e);
+        return [];
+    }
 };
 
 // Launch Transaction Construction
