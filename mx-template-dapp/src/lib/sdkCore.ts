@@ -6,6 +6,7 @@ export {
   Message,
   MessageComputer,
   ProxyNetworkProvider,
+  Query,
   SmartContractController,
   SmartContractTransactionsFactory,
   Token,
@@ -15,5 +16,8 @@ export {
   TransactionsFactoryConfig,
   TransferTransactionsFactory,
   UserSecretKey,
-  UserSigner
+  UserSigner,
+  BytesValue,
+  BigUIntValue,
+  BooleanValue
 } from '@multiversx/sdk-core';

@@ -2,9 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { API_URL } from '@/config';
 
 // Updated Credentials provided by user
-const PROJECT_ID = 'nbeywvdwrcagszjmiqvq';
+const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const SUPABASE_URL = `https://${PROJECT_ID}.supabase.co`;
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iZXl3dmR3cmNhZ3N6am1pcXZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyMjY3MDMsImV4cCI6MjA4MzgwMjcwM30._WANQIf8Dlpg0OeIHE-s7SZCYnpsvs3sAMPxvbT19ds';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -13,6 +13,8 @@ const STORAGE_KEYS = {
     TOKENS: 'memex_local_tokens',
     NFTS: 'memex_local_nfts'
 };
+
+
 
 export interface TokenDB {
     id?: string;

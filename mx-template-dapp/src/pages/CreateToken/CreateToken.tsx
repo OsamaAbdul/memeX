@@ -65,7 +65,7 @@ export const CreateToken = () => {
     const navigate = useNavigate();
     const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
-    const { pendingTransactions } = useGetPendingTransactions();
+    const pendingTransactions = useGetPendingTransactions();
     const { isGenerating, setGenerating, setGenerationResult, activeGeneration } = useAppStore();
 
     // Effect: Watch for Issue Transaction Completion

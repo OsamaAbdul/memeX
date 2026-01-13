@@ -16,9 +16,35 @@ import {
     useGetAccount,
     useGetNetworkConfig,
     ProxyNetworkProvider,
-    formatAmount
+    Query,
+    BytesValue,
+    BigUIntValue,
+    BooleanValue,
+    ContractFunction
 } from '@/lib';
 import { contractAddress } from '@/config';
+
+// Custom formatter to avoid library issues
+const formatBalance = (amount: string | bigint, decimals: number = 18, digits: number = 4) => {
+    try {
+        const val = BigInt(amount);
+        const divisor = BigInt(10) ** BigInt(decimals);
+        const integerPart = val / divisor;
+        let fractionalPart = val % divisor;
+
+        // Pad with leading zeros
+        let fracStr = fractionalPart.toString().padStart(decimals, '0');
+        // Take first N digits
+        fracStr = fracStr.substring(0, digits);
+        // Remove trailing zeros
+        fracStr = fracStr.replace(/0+$/, '');
+
+        if (!fracStr) return integerPart.toString();
+        return `${integerPart}.${fracStr}`;
+    } catch (e) {
+        return '0';
+    }
+};
 
 // Mock data for the chart - keep as is for visual demo
 const chartData = [
@@ -55,7 +81,7 @@ export const TokenDetails = () => {
     const [tokenBalance, setTokenBalance] = useState('0');
     const [egldBalance, setEgldBalance] = useState('0');
 
-    const { address, account: userAccount } = useGetAccount();
+    const { address } = useGetAccount();
     const { network } = useGetNetworkConfig();
 
     useEffect(() => {
@@ -72,7 +98,7 @@ export const TokenDetails = () => {
 
                     // Get EGLD Balance
                     const acc = await proxyProvider.getAccount(new Address(address));
-                    setEgldBalance(formatAmount({ input: acc.balance.toString(), digits: 4, showLastNonZeroDecimal: false }));
+                    setEgldBalance(formatBalance(acc.balance.toString(), 18, 4));
 
                     // Get Token Balance
                     // API Call to get specific token balance
@@ -82,7 +108,7 @@ export const TokenDetails = () => {
                         if (tokenRes.ok) {
                             const tokenData = await tokenRes.json();
                             // Assuming standard 18 decimals for these tokens for now, or use tokenData.decimals
-                            setTokenBalance(formatAmount({ input: tokenData.balance, digits: 2, showLastNonZeroDecimal: false }));
+                            setTokenBalance(formatBalance(tokenData.balance, 18, 2));
                         } else {
                             setTokenBalance('0');
                         }
@@ -145,25 +171,27 @@ export const TokenDetails = () => {
             // If Buy: Input is EGLD (18 decimals)
             // If Sell: Input is Token (Assuming 18 decimals)
             const inputVal = BigInt(Math.floor(parseFloat(amount) * 10 ** 18));
-            let amountHex = inputVal.toString(16);
-            if (amountHex.length % 2 !== 0) amountHex = '0' + amountHex;
-
-            const isBuyHex = tradeType === 'buy' ? '01' : '00';
+            const isBuy = tradeType === 'buy';
 
             const query = {
-                scAddress: contractAddress,
-                funcName: 'getAmountOut',
-                args: [tokenIdHex, amountHex, isBuyHex]
+                contract: new Address(contractAddress),
+                function: new ContractFunction('getAmountOut'),
+                args: [
+                    BytesValue.fromUTF8(symbol),
+                    new BigUIntValue(inputVal),
+                    new BooleanValue(isBuy)
+                ]
             };
 
-            const queryResponse = await proxyProvider.queryContract(query);
+            const queryResponse = await proxyProvider.queryContract(query as any);
+            const returnData = queryResponse.returnDataParts;
 
             // Parse Result
             // Output: BigUint
-            if (queryResponse.returnData && queryResponse.returnData.length > 0) {
-                const returnBuffer = Buffer.from(queryResponse.returnData[0], 'base64');
-                const resultBig = BigInt('0x' + returnBuffer.toString('hex'));
-                const formatted = formatAmount({ input: resultBig.toString(), digits: 4, showLastNonZeroDecimal: false });
+            if (returnData && returnData.length > 0) {
+                const returnBuffer = returnData[0];
+                const resultBig = BigInt('0x' + Buffer.from(returnBuffer).toString('hex'));
+                const formatted = formatBalance(resultBig.toString(), 18, 4);
                 setEstimatedOutput(formatted);
             }
 
