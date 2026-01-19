@@ -43,6 +43,9 @@ export const Navbar = () => {
                     <Link to={RouteNamesEnum.dashboardNFTs} className="text-sm font-bold text-slate-400 hover:text-purple-400 transition-colors">
                         NFT MARKET
                     </Link>
+                    <Link to={RouteNamesEnum.roadmap} className="text-sm font-bold text-slate-400 hover:text-mvx-fuchsia-550 transition-colors">
+                        ROADMAP
+                    </Link>
                 </div>
 
                 {/* Right Side Auth & Mobile Toggle */}
@@ -90,6 +93,9 @@ export const Navbar = () => {
                     </Link>
                     <Link to={RouteNamesEnum.dashboardNFTs} onClick={closeMenu} className="text-lg font-bold text-purple-400 hover:text-purple-300 py-2 border-b border-white/5">
                         NFT MARKET
+                    </Link>
+                    <Link to={RouteNamesEnum.roadmap} onClick={closeMenu} className="text-lg font-bold text-mvx-fuchsia-550 hover:text-fuchsia-400 py-2 border-b border-white/5">
+                        ROADMAP
                     </Link>
 
                     <div className="pt-2 flex flex-col gap-3">

@@ -4,6 +4,7 @@ import { Disclaimer } from 'pages/Disclaimer/Disclaimer';
 import { Home } from 'pages/Home/Home';
 import { Unlock } from 'pages/Unlock/Unlock';
 import { RouteType } from 'types';
+import { Roadmap } from 'pages/Roadmap';
 
 import { Overview } from 'pages/Dashboard/Overview';
 import { CreateToken } from 'pages/CreateToken/CreateToken';
@@ -70,5 +71,10 @@ export const routes: RouteWithTitleType[] = [
     path: RouteNamesEnum.disclaimer,
     title: 'Disclaimer',
     component: Disclaimer
+  },
+  {
+    path: RouteNamesEnum.roadmap,
+    title: 'Roadmap',
+    component: Roadmap
   }
 ];
